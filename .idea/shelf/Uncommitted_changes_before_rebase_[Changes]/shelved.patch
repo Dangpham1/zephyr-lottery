@@ -1,0 +1,1414 @@
+Index: code/app/src/main/java/com/example/zephyr_lottery/repositories/EventRepository.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package com.example.zephyr_lottery.repositories;\r\n\r\nimport android.util.Log;\r\n\r\nimport com.example.zephyr_lottery.models.Participant;\r\nimport com.google.android.gms.tasks.Task;\r\nimport com.google.firebase.Timestamp;\r\nimport com.google.firebase.firestore.*;\r\n\r\nimport java.util.HashMap;\r\nimport java.util.List;\r\nimport java.util.Map;\r\nimport java.util.function.Consumer;\r\n\r\n/**\r\n * Manages participant statuses and invitation logic, and supports bulk notifications.\r\n */\r\npublic class EventRepository {\r\n    private final FirebaseFirestore db = FirebaseFirestore.getInstance();\r\n\r\n    public Task<Void> updateParticipantStatus(String eventId, String userId, String status) {\r\n        DocumentReference participantRef = db.collection(\"events\")\r\n                .document(eventId)\r\n                .collection(\"participants\")\r\n                .document(userId);\r\n        Participant p = new Participant(userId, status, null, Timestamp.now());\r\n        return participantRef.set(p, SetOptions.merge());\r\n    }\r\n\r\n\r\n    public void acceptInvitation(String eventId, String userId,\r\n                                 Runnable onSuccess, Consumer<Exception> onError) {\r\n        updateParticipantStatus(eventId, userId, \"CONFIRMED\")\r\n                .addOnSuccessListener(v -> {\r\n                    Log.d(\"EventRepo\", \"Accepted invitation\");\r\n                    if (onSuccess != null) onSuccess.run();\r\n                })\r\n                .addOnFailureListener(e -> {\r\n                    Log.e(\"EventRepo\", \"Accept failed\", e);\r\n                    if (onError != null) onError.accept(e);\r\n                });\r\n    }\r\n\r\n\r\n    public void declineInvitation(String eventId, String userId,\r\n                                  Runnable onSuccess, Consumer<Exception> onError) {\r\n        updateParticipantStatus(eventId, userId, \"CANCELLED\")\r\n                .addOnSuccessListener(v -> {\r\n                    Log.d(\"EventRepo\", \"Declined invitation\");\r\n                    inviteNextFromWaitingList(eventId, onSuccess, onError);\r\n                })\r\n                .addOnFailureListener(e -> {\r\n                    Log.e(\"EventRepo\", \"Decline failed\", e);\r\n                    if (onError != null) onError.accept(e);\r\n                });\r\n    }\r\n\r\n\r\n    public void inviteNextFromWaitingList(String eventId,\r\n                                          Runnable onSuccess,\r\n                                          Consumer<Exception> onError) {\r\n        CollectionReference waitingRef = db.collection(\"events\")\r\n                .document(eventId)\r\n                .collection(\"waitingList\");\r\n        waitingRef.orderBy(\"joinedAt\", Query.Direction.ASCENDING)\r\n                .limit(1)\r\n                .get()\r\n                .addOnSuccessListener(query -> {\r\n                    List<DocumentSnapshot> docs = query.getDocuments();\r\n                    if (docs.isEmpty()) {\r\n                        Log.d(\"EventRepo\", \"No waiting list entrants\");\r\n                        if (onSuccess != null) onSuccess.run();\r\n                        return;\r\n                    }\r\n                    DocumentSnapshot next = docs.get(0);\r\n                    String nextUserId = next.getId();\r\n                    WriteBatch batch = db.batch();\r\n                    DocumentReference participantRef = db.collection(\"events\")\r\n                            .document(eventId)\r\n                            .collection(\"participants\")\r\n                            .document(nextUserId);\r\n                    Participant invited = new Participant(\r\n                            nextUserId, \"SELECTED\", Timestamp.now(), Timestamp.now()\r\n                    );\r\n                    batch.set(participantRef, invited, SetOptions.merge());\r\n                    batch.delete(next.getReference());\r\n                    batch.commit()\r\n                            .addOnSuccessListener(bv -> {\r\n                                Log.d(\"EventRepo\", \"Invited next entrant: \" + nextUserId);\r\n                                if (onSuccess != null) onSuccess.run();\r\n                            })\r\n                            .addOnFailureListener(e -> {\r\n                                Log.e(\"EventRepo\", \"Failed inviting next entrant\", e);\r\n                                if (onError != null) onError.accept(e);\r\n                            });\r\n                })\r\n                .addOnFailureListener(e -> {\r\n                    Log.e(\"EventRepo\", \"Read waiting list failed\", e);\r\n                    if (onError != null) onError.accept(e);\r\n                });\r\n    }\r\n\r\n    public ListenerRegistration listenToParticipantStatus(String eventId, String userId,\r\n                                                          Consumer<String> onStatus) {\r\n        DocumentReference ref = db.collection(\"events\")\r\n                .document(eventId)\r\n                .collection(\"participants\")\r\n                .document(userId);\r\n        return ref.addSnapshotListener((snap, error) -> {\r\n            if (error != null) {\r\n                Log.e(\"EventRepo\", \"Listen error\", error);\r\n                return;\r\n            }\r\n            String status = (snap != null && snap.exists()) ? snap.getString(\"status\") : null;\r\n            if (onStatus != null) onStatus.accept(status);\r\n        });\r\n    }\r\n\r\n    /**\r\n     * US02.07.02: Notify all selected entrants and log notifications.\r\n     */\r\n    public void notifyAllSelectedEntrants(String eventId,\r\n                                          Runnable onSuccess,\r\n                                          Consumer<Exception> onError) {\r\n        CollectionReference participantsRef = db.collection(\"events\")\r\n                .document(eventId)\r\n                .collection(\"participants\");\r\n        participantsRef.whereEqualTo(\"status\", \"SELECTED\")\r\n                .get()\r\n                .addOnSuccessListener(query -> {\r\n                    if (query.isEmpty()) {\r\n                        Log.d(\"EventRepo\", \"No selected entrants to notify for event \" + eventId);\r\n                        if (onSuccess != null) onSuccess.run();\r\n                        return;\r\n                    }\r\n\r\n                    for (DocumentSnapshot doc : query) {\r\n                        String userId = doc.getId();\r\n                        sendNotificationToUser(userId,\r\n                                \"Congratulations! You have been selected for event \" + eventId);\r\n                        // Audit log\r\n                        logNotificationSent(eventId, userId, \"SELECTED\", null, null);\r\n                    }\r\n\r\n                    if (onSuccess != null) onSuccess.run();\r\n                })\r\n                .addOnFailureListener(e -> {\r\n                    Log.e(\"EventRepo\", \"Failed to fetch selected entrants\", e);\r\n                    if (onError != null) onError.accept(e);\r\n                });\r\n    }\r\n\r\n    /**\r\n     * US02.07.01: Notify all waiting list entrants and log notifications.\r\n     */\r\n    public void notifyAllWaitingListEntrants(String eventId,\r\n                                             Runnable onSuccess,\r\n                                             Consumer<Exception> onError) {\r\n        CollectionReference participantsRef = db.collection(\"events\")\r\n                .document(eventId)\r\n                .collection(\"participants\");\r\n\r\n        participantsRef.whereEqualTo(\"status\", \"PENDING\")\r\n                .get()\r\n                .addOnSuccessListener(query -> {\r\n                    if (query.isEmpty()) {\r\n                        Log.d(\"EventRepo\", \"No waiting list entrants to notify for event \" + eventId);\r\n                        if (onSuccess != null) onSuccess.run();\r\n                        return;\r\n                    }\r\n\r\n                    for (DocumentSnapshot doc : query) {\r\n                        String userId = doc.getId();\r\n                        sendNotificationToUser(userId,\r\n                                \"You are on the waiting list for event \" + eventId);\r\n                        // Audit log\r\n                        logNotificationSent(eventId, userId, \"WAITING\", null, null);\r\n                    }\r\n\r\n                    if (onSuccess != null) onSuccess.run();\r\n                })\r\n                .addOnFailureListener(e -> {\r\n                    Log.e(\"EventRepo\", \"Failed to fetch waiting list entrants\", e);\r\n                    if (onError != null) onError.accept(e);\r\n                });\r\n    }\r\n\r\n    /**\r\n     * US02.07.03: Notify all cancelled entrants and log notifications.\r\n     */\r\n    public void notifyAllCancelledEntrants(String eventId,\r\n                                           Runnable onSuccess,\r\n                                           Consumer<Exception> onError) {\r\n        CollectionReference participantsRef = db.collection(\"events\")\r\n                .document(eventId)\r\n                .collection(\"participants\");\r\n\r\n        participantsRef.whereEqualTo(\"status\", \"CANCELLED\")\r\n                .get()\r\n                .addOnSuccessListener(query -> {\r\n                    if (query.isEmpty()) {\r\n                        Log.d(\"EventRepo\", \"No cancelled entrants to notify for event \" + eventId);\r\n                        if (onSuccess != null) onSuccess.run();\r\n                        return;\r\n                    }\r\n\r\n                    for (DocumentSnapshot doc : query) {\r\n                        String userId = doc.getId();\r\n                        sendNotificationToUser(userId,\r\n                                \"Your participation in event \" + eventId + \" has been cancelled\");\r\n                        // Audit log\r\n                        logNotificationSent(eventId, userId, \"CANCELLED\", null, null);\r\n                    }\r\n\r\n                    if (onSuccess != null) onSuccess.run();\r\n                })\r\n                .addOnFailureListener(e -> {\r\n                    Log.e(\"EventRepo\", \"Failed to fetch cancelled entrants\", e);\r\n                    if (onError != null) onError.accept(e);\r\n                });\r\n    }\r\n\r\n    /**\r\n     * US03.08.01: Record a notification in an audit trail for admin review.\r\n     */\r\n    public void logNotificationSent(String eventId, String userId, String notificationType,\r\n                                    Runnable onSuccess, Consumer<Exception> onError) {\r\n        Map<String, Object> logEntry = new HashMap<>();\r\n        logEntry.put(\"eventId\", eventId);\r\n        logEntry.put(\"userId\", userId);\r\n        logEntry.put(\"notificationType\", notificationType);\r\n        logEntry.put(\"sentAt\", Timestamp.now());\r\n\r\n        db.collection(\"notificationLogs\")\r\n                .add(logEntry)\r\n                .addOnSuccessListener(docRef -> {\r\n                    Log.d(\"EventRepo\", \"Logged notification: \" + docRef.getId());\r\n                    if (onSuccess != null) onSuccess.run();\r\n                })\r\n                .addOnFailureListener(e -> {\r\n                    Log.e(\"EventRepo\", \"Failed to log notification\", e);\r\n                    if (onError != null) onError.accept(e);\r\n                });\r\n    }\r\n\r\n    // Placeholder for actual FCM integration\r\n    private void sendNotificationToUser(String userId, String message) {\r\n        Log.d(\"EventRepo\", \"Sending notification to \" + userId + \": \" + message);\r\n    }\r\n}
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/code/app/src/main/java/com/example/zephyr_lottery/repositories/EventRepository.java b/code/app/src/main/java/com/example/zephyr_lottery/repositories/EventRepository.java
+--- a/code/app/src/main/java/com/example/zephyr_lottery/repositories/EventRepository.java	(revision 77c5c03bc67fc2eeac4a56552593b5496fbc7fc1)
++++ b/code/app/src/main/java/com/example/zephyr_lottery/repositories/EventRepository.java	(date 1764106393537)
+@@ -13,11 +13,24 @@
+ import java.util.function.Consumer;
+ 
+ /**
++ * This class manages the statuses of participants and the accepting/declining of invitations.
+  * Manages participant statuses and invitation logic, and supports bulk notifications.
+  */
+ public class EventRepository {
+     private final FirebaseFirestore db = FirebaseFirestore.getInstance();
+ 
++    /**
++     * Changes the status of a specified participant in an event
++     * @param eventId
++     *  The event ID that the participant is in the lottery for
++     * @param userId
++     *  The participant's ID
++     * @param status
++     *  The new status of the participant
++     * @return
++     *  Returns a Task when completed asynchronously
++     */
++
+     public Task<Void> updateParticipantStatus(String eventId, String userId, String status) {
+         DocumentReference participantRef = db.collection("events")
+                 .document(eventId)
+@@ -27,6 +40,17 @@
+         return participantRef.set(p, SetOptions.merge());
+     }
+ 
++    /**
++     * Accepts the invitation (called when the accept button from the notification screen is pushed)
++     * @param eventId
++     *  The ID of the event that the participant is accepting
++     * @param userId
++     *  The ID of the participant
++     * @param onSuccess
++     *  Runnable function if the invitation is properly accepted
++     * @param onError
++     *  Exception if the invitation is not properly accepted
++     */
+ 
+     public void acceptInvitation(String eventId, String userId,
+                                  Runnable onSuccess, Consumer<Exception> onError) {
+@@ -41,6 +65,17 @@
+                 });
+     }
+ 
++    /**
++     * Declines the invitation, then invites next participant from the waiting list (called when the decline button from the notification screen is pushed)
++     * @param eventId
++     *  The ID of the event that the participant is declining
++     * @param userId
++     *  The ID of the participant
++     * @param onSuccess
++     *  Runnable function if the invitation is properly declined
++     * @param onError
++     *  Exception if the invitation is not properly declined
++     */
+ 
+     public void declineInvitation(String eventId, String userId,
+                                   Runnable onSuccess, Consumer<Exception> onError) {
+@@ -55,6 +90,15 @@
+                 });
+     }
+ 
++    /**
++     * Invites the next participant from the waiting list, based on the oldest joinedAt
++     * @param eventId
++     *  The ID of the event
++     * @param onSuccess
++     *  Runnable function if the invitation is successfully sent
++     * @param onError
++     *  Exception if the invitation is not properly sent
++     */
+ 
+     public void inviteNextFromWaitingList(String eventId,
+                                           Runnable onSuccess,
+@@ -100,6 +144,20 @@
+                 });
+     }
+ 
++    // Listen to participant status for current user to toggle UI
++
++    /**
++     * Sets a listener for any changes in status in the database, to update the list in real time
++     * @param eventId
++     *  The current ID of the event
++     * @param userId
++     *  The current user ID to track
++     * @param onStatus
++     *  Collects the status changes
++     * @return
++     *  Returns a ListenerRegistration that listens for status changes
++     */
++
+     public ListenerRegistration listenToParticipantStatus(String eventId, String userId,
+                                                           Consumer<String> onStatus) {
+         DocumentReference ref = db.collection("events")
+Index: code/app/build.gradle.kts
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>plugins {\r\n    alias(libs.plugins.android.application)\r\n    id(\"com.google.gms.google-services\")\r\n}\r\n\r\nandroid {\r\n    namespace = \"com.example.zephyr_lottery\"\r\n    compileSdk = 36\r\n\r\n    defaultConfig {\r\n        applicationId = \"com.example.zephyr_lottery\"\r\n        minSdk = 24\r\n        targetSdk = 36\r\n        versionCode = 1\r\n        versionName = \"1.0\"\r\n\r\n        testInstrumentationRunner = \"androidx.test.runner.AndroidJUnitRunner\"\r\n    }\r\n\r\n    buildTypes {\r\n        release {\r\n            isMinifyEnabled = false\r\n            proguardFiles(\r\n                getDefaultProguardFile(\"proguard-android-optimize.txt\"),\r\n                \"proguard-rules.pro\"\r\n            )\r\n        }\r\n    }\r\n    compileOptions {\r\n        sourceCompatibility = JavaVersion.VERSION_11\r\n        targetCompatibility = JavaVersion.VERSION_11\r\n    }\r\n\r\n    tasks.withType<Test>{\r\n        useJUnitPlatform()\r\n    }\r\n}\r\n\r\ndependencies {\r\n\r\n    implementation(libs.appcompat)\r\n    implementation(libs.material)\r\n    implementation(libs.activity)\r\n    implementation(libs.constraintlayout)\r\n    implementation(libs.firebase.firestore)\r\n    testImplementation(libs.junit)\r\n    androidTestImplementation(libs.ext.junit)\r\n    androidTestImplementation(libs.espresso.core)\r\n\r\n    testImplementation(\"org.junit.jupiter:junit-jupiter-api:5.0.1\")\r\n    testRuntimeOnly(\"org.junit.jupiter:junit-jupiter-engine:5.0.1\")\r\n\r\n    implementation(platform(\"com.google.firebase:firebase-bom:34.4.0\"))\r\n    implementation(\"com.google.firebase:firebase-analytics\")\r\n    implementation(\"com.google.firebase:firebase-auth\")\r\n    implementation (\"com.journeyapps:zxing-android-embedded:4.3.0\")\r\n\r\n    implementation(\"com.google.firebase:firebase-messaging:23.4.0\")\r\n    implementation(\"com.google.firebase:firebase-firestore:24.10.1\")\r\n}\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/code/app/build.gradle.kts b/code/app/build.gradle.kts
+--- a/code/app/build.gradle.kts	(revision 77c5c03bc67fc2eeac4a56552593b5496fbc7fc1)
++++ b/code/app/build.gradle.kts	(date 1764105407999)
+@@ -5,12 +5,12 @@
+ 
+ android {
+     namespace = "com.example.zephyr_lottery"
+-    compileSdk = 36
++    compileSdk = 34
+ 
+     defaultConfig {
+         applicationId = "com.example.zephyr_lottery"
+         minSdk = 24
+-        targetSdk = 36
++        targetSdk = 34
+         versionCode = 1
+         versionName = "1.0"
+ 
+Index: .idea/zephyr-lottery.iml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/zephyr-lottery.iml b/.idea/zephyr-lottery.iml
+new file mode 100644
+--- /dev/null	(date 1763674992447)
++++ b/.idea/zephyr-lottery.iml	(date 1763674992447)
+@@ -0,0 +1,9 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<module type="JAVA_MODULE" version="4">
++  <component name="NewModuleRootManager" inherit-compiler-output="true">
++    <exclude-output />
++    <content url="file://$MODULE_DIR$" />
++    <orderEntry type="inheritedJdk" />
++    <orderEntry type="sourceFolder" forTests="false" />
++  </component>
++</module>
+\ No newline at end of file
+Index: .idea/deviceManager.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/deviceManager.xml b/.idea/deviceManager.xml
+new file mode 100644
+--- /dev/null	(date 1763685475807)
++++ b/.idea/deviceManager.xml	(date 1763685475807)
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="DeviceTable">
++    <option name="columnSorters">
++      <list>
++        <ColumnSorterState>
++          <option name="column" value="Name" />
++          <option name="order" value="ASCENDING" />
++        </ColumnSorterState>
++      </list>
++    </option>
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/modules.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/modules.xml b/.idea/modules.xml
+new file mode 100644
+--- /dev/null	(date 1763674992452)
++++ b/.idea/modules.xml	(date 1763674992452)
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="ProjectModuleManager">
++    <modules>
++      <module fileurl="file://$PROJECT_DIR$/.idea/zephyr-lottery.iml" filepath="$PROJECT_DIR$/.idea/zephyr-lottery.iml" />
++    </modules>
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/.gitignore
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/.gitignore b/.idea/.gitignore
+new file mode 100644
+--- /dev/null	(date 1763674963574)
++++ b/.idea/.gitignore	(date 1763674963574)
+@@ -0,0 +1,3 @@
++# Default ignored files
++/shelf/
++/workspace.xml
+Index: .idea/runConfigurations/zephyr_lottery.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/runConfigurations/zephyr_lottery.xml b/.idea/runConfigurations/zephyr_lottery.xml
+new file mode 100644
+--- /dev/null	(date 1764098800713)
++++ b/.idea/runConfigurations/zephyr_lottery.xml	(date 1764098800713)
+@@ -0,0 +1,71 @@
++<component name="ProjectRunConfigurationManager">
++  <configuration default="false" name="zephyr-lottery" type="AndroidRunConfigurationType" factoryName="Android App" activateToolWindowBeforeRun="false">
++    <option name="ANDROID_RUN_CONFIGURATION_SCHEMA_VERSION" value="1" />
++    <option name="DEPLOY" value="true" />
++    <option name="DEPLOY_APK_FROM_BUNDLE" value="false" />
++    <option name="DEPLOY_AS_INSTANT" value="false" />
++    <option name="ARTIFACT_NAME" value="" />
++    <option name="PM_INSTALL_OPTIONS" value="" />
++    <option name="ALL_USERS" value="false" />
++    <option name="ALWAYS_INSTALL_WITH_PM" value="false" />
++    <option name="ALLOW_ASSUME_VERIFIED" value="false" />
++    <option name="CLEAR_APP_STORAGE" value="false" />
++    <option name="DYNAMIC_FEATURES_DISABLED_LIST" value="" />
++    <option name="ACTIVITY_EXTRA_FLAGS" value="" />
++    <option name="MODE" value="default_activity" />
++    <option name="RESTORE_ENABLED" value="false" />
++    <option name="RESTORE_FILE" value="" />
++    <option name="RESTORE_FRESH_INSTALL_ONLY" value="false" />
++    <option name="CLEAR_LOGCAT" value="false" />
++    <option name="SHOW_LOGCAT_AUTOMATICALLY" value="false" />
++    <option name="TARGET_SELECTION_MODE" value="DEVICE_AND_SNAPSHOT_COMBO_BOX" />
++    <option name="SELECTED_CLOUD_MATRIX_CONFIGURATION_ID" value="-1" />
++    <option name="SELECTED_CLOUD_MATRIX_PROJECT_ID" value="" />
++    <option name="DEBUGGER_TYPE" value="Auto" />
++    <Auto>
++      <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
++      <option name="SHOW_STATIC_VARS" value="true" />
++      <option name="WORKING_DIR" value="" />
++      <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
++      <option name="SHOW_OPTIMIZED_WARNING" value="true" />
++      <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
++      <option name="DEBUG_SANDBOX_SDK" value="false" />
++    </Auto>
++    <Hybrid>
++      <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
++      <option name="SHOW_STATIC_VARS" value="true" />
++      <option name="WORKING_DIR" value="" />
++      <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
++      <option name="SHOW_OPTIMIZED_WARNING" value="true" />
++      <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
++      <option name="DEBUG_SANDBOX_SDK" value="false" />
++    </Hybrid>
++    <Java>
++      <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
++      <option name="DEBUG_SANDBOX_SDK" value="false" />
++    </Java>
++    <Native>
++      <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
++      <option name="SHOW_STATIC_VARS" value="true" />
++      <option name="WORKING_DIR" value="" />
++      <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
++      <option name="SHOW_OPTIMIZED_WARNING" value="true" />
++      <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
++      <option name="DEBUG_SANDBOX_SDK" value="false" />
++    </Native>
++    <Profilers>
++      <option name="ADVANCED_PROFILING_ENABLED" value="false" />
++      <option name="STARTUP_PROFILING_ENABLED" value="false" />
++      <option name="STARTUP_CPU_PROFILING_ENABLED" value="false" />
++      <option name="STARTUP_CPU_PROFILING_CONFIGURATION_NAME" value="Java/Kotlin Method Sample (legacy)" />
++      <option name="STARTUP_NATIVE_MEMORY_PROFILING_ENABLED" value="false" />
++      <option name="NATIVE_MEMORY_SAMPLE_RATE_BYTES" value="2048" />
++    </Profilers>
++    <option name="DEEP_LINK" value="" />
++    <option name="ACTIVITY" value="" />
++    <option name="ACTIVITY_CLASS" value="" />
++    <option name="SEARCH_ACTIVITY_IN_GLOBAL_SCOPE" value="false" />
++    <option name="SKIP_ACTIVITY_VALIDATION" value="false" />
++    <method v="2" />
++  </configuration>
++</component>
+\ No newline at end of file
+Index: .idea/deploymentTargetSelector.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/deploymentTargetSelector.xml b/.idea/deploymentTargetSelector.xml
+new file mode 100644
+--- /dev/null	(date 1764016667396)
++++ b/.idea/deploymentTargetSelector.xml	(date 1764016667396)
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="deploymentTargetSelector">
++    <selectionStates>
++      <SelectionState runConfigName="zephyr-lottery">
++        <option name="selectionMode" value="DROPDOWN" />
++      </SelectionState>
++    </selectionStates>
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/appInsightsSettings.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/appInsightsSettings.xml b/.idea/appInsightsSettings.xml
+new file mode 100644
+--- /dev/null	(date 1764102151627)
++++ b/.idea/appInsightsSettings.xml	(date 1764102151627)
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="AppInsightsSettings">
++    <option name="selectedTabId" value="Firebase Crashlytics" />
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/misc.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/misc.xml b/.idea/misc.xml
+new file mode 100644
+--- /dev/null	(date 1764105257875)
++++ b/.idea/misc.xml	(date 1764105257875)
+@@ -0,0 +1,5 @@
++<project version="4">
++  <component name="ProjectRootManager" version="2" project-jdk-name="Android API 36.0, extension level 17 Platform" project-jdk-type="Android SDK">
++    <output url="file://$PROJECT_DIR$/out" />
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/caches/deviceStreaming.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/caches/deviceStreaming.xml b/.idea/caches/deviceStreaming.xml
+new file mode 100644
+--- /dev/null	(date 1763944733939)
++++ b/.idea/caches/deviceStreaming.xml	(date 1763944733939)
+@@ -0,0 +1,1041 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="DeviceStreaming">
++    <option name="deviceSelectionList">
++      <list>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="Sony" />
++          <option name="codename" value="A402SO" />
++          <option name="id" value="A402SO" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Sony" />
++          <option name="name" value="Xperia 10" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2520" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="27" />
++          <option name="brand" value="DOCOMO" />
++          <option name="codename" value="F01L" />
++          <option name="id" value="F01L" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="FUJITSU" />
++          <option name="name" value="F-01L" />
++          <option name="screenDensity" value="360" />
++          <option name="screenX" value="720" />
++          <option name="screenY" value="1280" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="OnePlus" />
++          <option name="codename" value="OP535DL1" />
++          <option name="id" value="OP535DL1" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="OnePlus" />
++          <option name="name" value="CPH2409" />
++          <option name="screenDensity" value="401" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2412" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="OnePlus" />
++          <option name="codename" value="OP5552L1" />
++          <option name="id" value="OP5552L1" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="OnePlus" />
++          <option name="name" value="CPH2415" />
++          <option name="screenDensity" value="480" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2412" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="OnePlus" />
++          <option name="codename" value="OP5552L1" />
++          <option name="id" value="OP5552L1" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="OnePlus" />
++          <option name="name" value="CPH2415" />
++          <option name="screenDensity" value="480" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2412" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="OPPO" />
++          <option name="codename" value="OP573DL1" />
++          <option name="id" value="OP573DL1" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="OPPO" />
++          <option name="name" value="CPH2557" />
++          <option name="screenDensity" value="480" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="28" />
++          <option name="brand" value="DOCOMO" />
++          <option name="codename" value="SH-01L" />
++          <option name="id" value="SH-01L" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="SHARP" />
++          <option name="name" value="AQUOS sense2 SH-01L" />
++          <option name="screenDensity" value="480" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2160" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="Lenovo" />
++          <option name="codename" value="TB330FU" />
++          <option name="formFactor" value="Tablet" />
++          <option name="id" value="TB330FU" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Lenovo" />
++          <option name="name" value="Tab M11" />
++          <option name="screenDensity" value="240" />
++          <option name="screenX" value="1200" />
++          <option name="screenY" value="1920" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a06" />
++          <option name="id" value="a06" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy A06" />
++          <option name="screenDensity" value="300" />
++          <option name="screenX" value="720" />
++          <option name="screenY" value="1600" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a14m" />
++          <option name="id" value="a14m" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-A145R" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2408" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a15" />
++          <option name="id" value="a15" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="A15" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a15x" />
++          <option name="id" value="a15x" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="A15 5G" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a16" />
++          <option name="id" value="a16" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-A165M" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a16x" />
++          <option name="id" value="a16x" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="A16 5G" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="36" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a26x" />
++          <option name="id" value="a26x" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-A266B" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a35x" />
++          <option name="id" value="a35x" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="A35" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a35x" />
++          <option name="id" value="a35x" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="A35" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a36xq" />
++          <option name="id" value="a36xq" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-A366E" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="a56x" />
++          <option name="id" value="a56x" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-A566E" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="google" />
++          <option name="codename" value="akita" />
++          <option name="id" value="akita" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 8a" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="google" />
++          <option name="codename" value="akita" />
++          <option name="id" value="akita" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 8a" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="arcfox" />
++          <option name="id" value="arcfox" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="razr plus 2024" />
++          <option name="screenDensity" value="360" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="1272" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="austin" />
++          <option name="id" value="austin" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="moto g 5G (2022)" />
++          <option name="screenDensity" value="280" />
++          <option name="screenX" value="720" />
++          <option name="screenY" value="1600" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="b0q" />
++          <option name="id" value="b0q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy S22 Ultra" />
++          <option name="screenDensity" value="600" />
++          <option name="screenX" value="1440" />
++          <option name="screenY" value="3088" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="b6q" />
++          <option name="id" value="b6q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Flip 6" />
++          <option name="screenDensity" value="340" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2640" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="36" />
++          <option name="brand" value="google" />
++          <option name="codename" value="blazer" />
++          <option name="id" value="blazer" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 10 Pro" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2410" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="32" />
++          <option name="brand" value="google" />
++          <option name="codename" value="bluejay" />
++          <option name="id" value="bluejay" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 6a" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="google" />
++          <option name="codename" value="caiman" />
++          <option name="id" value="caiman" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 9 Pro" />
++          <option name="screenDensity" value="360" />
++          <option name="screenX" value="960" />
++          <option name="screenY" value="2142" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="google" />
++          <option name="codename" value="caiman" />
++          <option name="id" value="caiman" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 9 Pro" />
++          <option name="screenDensity" value="360" />
++          <option name="screenX" value="960" />
++          <option name="screenY" value="2142" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="google" />
++          <option name="codename" value="comet" />
++          <option name="default" value="true" />
++          <option name="id" value="comet" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 9 Pro Fold" />
++          <option name="screenDensity" value="390" />
++          <option name="screenX" value="2076" />
++          <option name="screenY" value="2152" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="google" />
++          <option name="codename" value="comet" />
++          <option name="default" value="true" />
++          <option name="id" value="comet" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 9 Pro Fold" />
++          <option name="screenDensity" value="390" />
++          <option name="screenX" value="2076" />
++          <option name="screenY" value="2152" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="29" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="crownqlteue" />
++          <option name="id" value="crownqlteue" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy Note9" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="2220" />
++          <option name="screenY" value="1080" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="dm1q" />
++          <option name="id" value="dm1q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="S23" />
++          <option name="screenDensity" value="480" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="dm2q" />
++          <option name="id" value="dm2q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="S23 Plus" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="dm3q" />
++          <option name="id" value="dm3q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy S23 Ultra" />
++          <option name="screenDensity" value="600" />
++          <option name="screenX" value="1440" />
++          <option name="screenY" value="3088" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="dubai" />
++          <option name="id" value="dubai" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="edge 30" />
++          <option name="screenDensity" value="405" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="e1q" />
++          <option name="default" value="true" />
++          <option name="id" value="e1q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy S24" />
++          <option name="screenDensity" value="480" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="e3q" />
++          <option name="id" value="e3q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy S24 Ultra" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1440" />
++          <option name="screenY" value="3120" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="google" />
++          <option name="codename" value="eos" />
++          <option name="id" value="eos" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Eos" />
++          <option name="screenDensity" value="320" />
++          <option name="screenX" value="384" />
++          <option name="screenY" value="384" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="google" />
++          <option name="codename" value="felix" />
++          <option name="id" value="felix" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel Fold" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="2208" />
++          <option name="screenY" value="1840" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="google" />
++          <option name="codename" value="felix" />
++          <option name="id" value="felix" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel Fold" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="2208" />
++          <option name="screenY" value="1840" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="google" />
++          <option name="codename" value="felix_camera" />
++          <option name="id" value="felix_camera" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel Fold (Camera-enabled)" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="2208" />
++          <option name="screenY" value="1840" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="fogona" />
++          <option name="id" value="fogona" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="moto g play - 2024" />
++          <option name="screenDensity" value="280" />
++          <option name="screenX" value="720" />
++          <option name="screenY" value="1600" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="fogos" />
++          <option name="id" value="fogos" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="moto g34 5G" />
++          <option name="screenDensity" value="280" />
++          <option name="screenX" value="720" />
++          <option name="screenY" value="1600" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="36" />
++          <option name="brand" value="google" />
++          <option name="codename" value="frankel" />
++          <option name="id" value="frankel" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 10" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2424" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="g0q" />
++          <option name="id" value="g0q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-S906U1" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="gta9pwifi" />
++          <option name="id" value="gta9pwifi" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-X210" />
++          <option name="screenDensity" value="240" />
++          <option name="screenX" value="1200" />
++          <option name="screenY" value="1920" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="gts7lwifi" />
++          <option name="id" value="gts7lwifi" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-T870" />
++          <option name="screenDensity" value="340" />
++          <option name="screenX" value="1600" />
++          <option name="screenY" value="2560" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="gts7xllite" />
++          <option name="id" value="gts7xllite" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-T738U" />
++          <option name="screenDensity" value="340" />
++          <option name="screenX" value="1600" />
++          <option name="screenY" value="2560" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="gts8uwifi" />
++          <option name="formFactor" value="Tablet" />
++          <option name="id" value="gts8uwifi" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy Tab S8 Ultra" />
++          <option name="screenDensity" value="320" />
++          <option name="screenX" value="1848" />
++          <option name="screenY" value="2960" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="gts8wifi" />
++          <option name="formFactor" value="Tablet" />
++          <option name="id" value="gts8wifi" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy Tab S8" />
++          <option name="screenDensity" value="274" />
++          <option name="screenX" value="1600" />
++          <option name="screenY" value="2560" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="gts9fe" />
++          <option name="id" value="gts9fe" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy Tab S9 FE 5G" />
++          <option name="screenDensity" value="280" />
++          <option name="screenX" value="1440" />
++          <option name="screenY" value="2304" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="gts9wifi" />
++          <option name="id" value="gts9wifi" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-X710" />
++          <option name="screenDensity" value="340" />
++          <option name="screenX" value="1600" />
++          <option name="screenY" value="2560" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="google" />
++          <option name="codename" value="husky" />
++          <option name="id" value="husky" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 8 Pro" />
++          <option name="screenDensity" value="390" />
++          <option name="screenX" value="1008" />
++          <option name="screenY" value="2244" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="30" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="java" />
++          <option name="id" value="java" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="G20" />
++          <option name="screenDensity" value="280" />
++          <option name="screenX" value="720" />
++          <option name="screenY" value="1600" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="kansas" />
++          <option name="id" value="kansas" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="moto g - 2025" />
++          <option name="screenDensity" value="280" />
++          <option name="screenX" value="720" />
++          <option name="screenY" value="1604" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="google" />
++          <option name="codename" value="komodo" />
++          <option name="id" value="komodo" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 9 Pro XL" />
++          <option name="screenDensity" value="360" />
++          <option name="screenX" value="1008" />
++          <option name="screenY" value="2244" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="google" />
++          <option name="codename" value="komodo" />
++          <option name="id" value="komodo" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 9 Pro XL" />
++          <option name="screenDensity" value="360" />
++          <option name="screenX" value="1008" />
++          <option name="screenY" value="2244" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="lamul" />
++          <option name="id" value="lamul" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="moto g05" />
++          <option name="screenDensity" value="280" />
++          <option name="screenX" value="720" />
++          <option name="screenY" value="1604" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="lion" />
++          <option name="id" value="lion" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="moto g04" />
++          <option name="screenDensity" value="280" />
++          <option name="screenX" value="720" />
++          <option name="screenY" value="1612" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="google" />
++          <option name="codename" value="lynx" />
++          <option name="id" value="lynx" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 7a" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="lyriq" />
++          <option name="id" value="lyriq" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="edge 40" />
++          <option name="screenDensity" value="400" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="manaus" />
++          <option name="id" value="manaus" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="edge 40 neo" />
++          <option name="screenDensity" value="400" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="motorola" />
++          <option name="codename" value="maui" />
++          <option name="id" value="maui" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Motorola" />
++          <option name="name" value="moto g play - 2023" />
++          <option name="screenDensity" value="280" />
++          <option name="screenX" value="720" />
++          <option name="screenY" value="1600" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="36" />
++          <option name="brand" value="google" />
++          <option name="codename" value="mustang" />
++          <option name="id" value="mustang" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 10 Pro XL" />
++          <option name="screenDensity" value="390" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2404" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="o1q" />
++          <option name="id" value="o1q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy S21" />
++          <option name="screenDensity" value="421" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="31" />
++          <option name="brand" value="google" />
++          <option name="codename" value="oriole" />
++          <option name="id" value="oriole" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 6" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="36" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="pa2q" />
++          <option name="id" value="pa2q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="S25+" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="pa3q" />
++          <option name="id" value="pa3q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy S25 Ultra" />
++          <option name="screenDensity" value="600" />
++          <option name="screenX" value="1440" />
++          <option name="screenY" value="3120" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="google" />
++          <option name="codename" value="panther" />
++          <option name="id" value="panther" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 7" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="psq" />
++          <option name="id" value="psq" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy S25 Edge" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1440" />
++          <option name="screenY" value="3120" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="q5q" />
++          <option name="id" value="q5q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy Z Fold5" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1812" />
++          <option name="screenY" value="2176" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="q6q" />
++          <option name="id" value="q6q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy Z Fold6" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1856" />
++          <option name="screenY" value="2160" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="30" />
++          <option name="brand" value="google" />
++          <option name="codename" value="r11" />
++          <option name="formFactor" value="Wear OS" />
++          <option name="id" value="r11" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel Watch" />
++          <option name="screenDensity" value="320" />
++          <option name="screenX" value="384" />
++          <option name="screenY" value="384" />
++          <option name="type" value="WEAR_OS" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="r11q" />
++          <option name="id" value="r11q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-S711U" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="36" />
++          <option name="brand" value="google" />
++          <option name="codename" value="rango" />
++          <option name="id" value="rango" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 10 Pro Fold" />
++          <option name="screenDensity" value="390" />
++          <option name="screenX" value="2076" />
++          <option name="screenY" value="2152" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="30" />
++          <option name="brand" value="google" />
++          <option name="codename" value="redfin" />
++          <option name="id" value="redfin" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 5" />
++          <option name="screenDensity" value="440" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2340" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="google" />
++          <option name="codename" value="shiba" />
++          <option name="id" value="shiba" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 8" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="t2q" />
++          <option name="id" value="t2q" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="Galaxy S21 Plus" />
++          <option name="screenDensity" value="394" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2400" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="33" />
++          <option name="brand" value="google" />
++          <option name="codename" value="tangorpro" />
++          <option name="formFactor" value="Tablet" />
++          <option name="id" value="tangorpro" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel Tablet" />
++          <option name="screenDensity" value="320" />
++          <option name="screenX" value="1600" />
++          <option name="screenY" value="2560" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="google" />
++          <option name="codename" value="tegu" />
++          <option name="id" value="tegu" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 9a" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2424" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="google" />
++          <option name="codename" value="tokay" />
++          <option name="default" value="true" />
++          <option name="id" value="tokay" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 9" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2424" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="35" />
++          <option name="brand" value="google" />
++          <option name="codename" value="tokay" />
++          <option name="default" value="true" />
++          <option name="id" value="tokay" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 9" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2424" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="36" />
++          <option name="brand" value="google" />
++          <option name="codename" value="tokay" />
++          <option name="default" value="true" />
++          <option name="id" value="tokay" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Google" />
++          <option name="name" value="Pixel 9" />
++          <option name="screenDensity" value="420" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2424" />
++        </PersistentDeviceSelectionData>
++        <PersistentDeviceSelectionData>
++          <option name="api" value="34" />
++          <option name="brand" value="samsung" />
++          <option name="codename" value="xcover7" />
++          <option name="id" value="xcover7" />
++          <option name="labId" value="google" />
++          <option name="manufacturer" value="Samsung" />
++          <option name="name" value="SM-G556B" />
++          <option name="screenDensity" value="450" />
++          <option name="screenX" value="1080" />
++          <option name="screenY" value="2408" />
++        </PersistentDeviceSelectionData>
++      </list>
++    </option>
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/vcs.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/vcs.xml b/.idea/vcs.xml
+new file mode 100644
+--- /dev/null	(date 1763680206358)
++++ b/.idea/vcs.xml	(date 1763680206358)
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="VcsDirectoryMappings">
++    <mapping directory="" vcs="Git" />
++  </component>
++</project>
+\ No newline at end of file

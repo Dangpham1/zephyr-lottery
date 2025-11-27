@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AnalysisUIOptions">
+    <option name="SPLITTER_PROPORTION" value="0.5695266" />
+  </component>
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="NONE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="3cdbb0ea-665d-4655-8ada-fb099c811dd2" name="Changes" comment="docs: Add and improve Javadocs for EventRepository methods&#10;&#10;Adds and refines the documentation for public methods within the `EventRepository` class. This includes documenting the purpose, parameters, and return values for the following methods:&#10;&#10;- `updateParticipantStatus`&#10;- `acceptInvitation`&#10;- `declineInvitation`&#10;- `inviteNextFromWaitingList`&#10;- `listenToParticipantStatus`">
+      <change afterPath="$PROJECT_DIR$/.idea/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/appInsightsSettings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/deviceManager.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/runConfigurations/zephyr_lottery.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/zephyr-lottery.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/app/build.gradle.kts" beforeDir="false" afterPath="$PROJECT_DIR$/code/app/build.gradle.kts" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=LocalEmulator, isTemplate=false, identifier=path=C:\Users\Dell\.android\avd\Medium_Phone.avd)]" />
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="US02.07.02_sendnotificationtoselectedentrants" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;history&quot;: [
+    {
+      &quot;author&quot;: &quot;Dangpham1&quot;
+    }
+  ],
+  &quot;lastFilter&quot;: {
+    &quot;author&quot;: &quot;Dangpham1&quot;
+  }
+}</component>
+  <component name="GitHubPullRequestState"><![CDATA[{
+  "prStates": [
+    {
+      "id": {
+        "id": "PR_kwDOP4tn5c61FVx6",
+        "number": 85
+      },
+      "lastSeen": 1763974534506
+    },
+    {
+      "id": {
+        "id": "PR_kwDOQdAmC861gJMb",
+        "number": 1
+      },
+      "lastSeen": 1764110820314
+    }
+  ]
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/Dangpham1/zephyr-lottery.git",
+    "accountId": "01db8ef0-68c8-478c-8639-631f2b9a6808"
+  },
+  "recentNewPullRequestHead": {
+    "server": {
+      "useHttp": false,
+      "host": "github.com",
+      "port": null,
+      "suffix": null
+    },
+    "owner": "Dangpham1",
+    "repository": "zephyr-lottery"
+  }
+}]]></component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="CurrentFile" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 4
+}</component>
+  <component name="ProjectId" id="35lMDkyPYUWCrGXJUSwlpjhKS9F" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "com.google.services.firebase.aqiPopupShown": "true",
+    "git-widget-placeholder": "US02.07.02__sendnotificationtoselectedentrants",
+    "project.structure.last.edited": "SDKs",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0",
+    "run.code.analysis.last.selected.profile": "pProject Default",
+    "settings.editor.selected.configurable": "preferences.general"
+  }
+}]]></component>
+  <component name="RunManager">
+    <configuration name="zephyr-lottery" type="AndroidRunConfigurationType" factoryName="Android App" activateToolWindowBeforeRun="false">
+      <option name="ANDROID_RUN_CONFIGURATION_SCHEMA_VERSION" value="1" />
+      <option name="DEPLOY" value="true" />
+      <option name="DEPLOY_APK_FROM_BUNDLE" value="false" />
+      <option name="DEPLOY_AS_INSTANT" value="false" />
+      <option name="ARTIFACT_NAME" value="" />
+      <option name="PM_INSTALL_OPTIONS" value="" />
+      <option name="ALL_USERS" value="false" />
+      <option name="ALWAYS_INSTALL_WITH_PM" value="false" />
+      <option name="ALLOW_ASSUME_VERIFIED" value="false" />
+      <option name="CLEAR_APP_STORAGE" value="false" />
+      <option name="DYNAMIC_FEATURES_DISABLED_LIST" value="" />
+      <option name="ACTIVITY_EXTRA_FLAGS" value="" />
+      <option name="MODE" value="default_activity" />
+      <option name="RESTORE_ENABLED" value="false" />
+      <option name="RESTORE_FILE" value="" />
+      <option name="RESTORE_FRESH_INSTALL_ONLY" value="false" />
+      <option name="CLEAR_LOGCAT" value="false" />
+      <option name="SHOW_LOGCAT_AUTOMATICALLY" value="false" />
+      <option name="TARGET_SELECTION_MODE" value="DEVICE_AND_SNAPSHOT_COMBO_BOX" />
+      <option name="SELECTED_CLOUD_MATRIX_CONFIGURATION_ID" value="-1" />
+      <option name="SELECTED_CLOUD_MATRIX_PROJECT_ID" value="" />
+      <option name="DEBUGGER_TYPE" value="Auto" />
+      <Auto>
+        <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
+        <option name="SHOW_STATIC_VARS" value="true" />
+        <option name="WORKING_DIR" value="" />
+        <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
+        <option name="SHOW_OPTIMIZED_WARNING" value="true" />
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Auto>
+      <Hybrid>
+        <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
+        <option name="SHOW_STATIC_VARS" value="true" />
+        <option name="WORKING_DIR" value="" />
+        <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
+        <option name="SHOW_OPTIMIZED_WARNING" value="true" />
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Hybrid>
+      <Java>
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Java>
+      <Native>
+        <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
+        <option name="SHOW_STATIC_VARS" value="true" />
+        <option name="WORKING_DIR" value="" />
+        <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
+        <option name="SHOW_OPTIMIZED_WARNING" value="true" />
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Native>
+      <Profilers>
+        <option name="ADVANCED_PROFILING_ENABLED" value="false" />
+        <option name="STARTUP_PROFILING_ENABLED" value="false" />
+        <option name="STARTUP_CPU_PROFILING_ENABLED" value="false" />
+        <option name="STARTUP_CPU_PROFILING_CONFIGURATION_NAME" value="Java/Kotlin Method Sample (legacy)" />
+        <option name="STARTUP_NATIVE_MEMORY_PROFILING_ENABLED" value="false" />
+        <option name="NATIVE_MEMORY_SAMPLE_RATE_BYTES" value="2048" />
+      </Profilers>
+      <option name="DEEP_LINK" value="" />
+      <option name="ACTIVITY" value="" />
+      <option name="ACTIVITY_CLASS" value="" />
+      <option name="SEARCH_ACTIVITY_IN_GLOBAL_SCOPE" value="false" />
+      <option name="SKIP_ACTIVITY_VALIDATION" value="false" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="Application" factoryName="Application">
+      <option name="ALTERNATIVE_JRE_PATH" value="Android API 36.0, extension level 17 Platform" />
+      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="true" />
+      <module name="zephyr-lottery" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="3cdbb0ea-665d-4655-8ada-fb099c811dd2" name="Changes" comment="refactor: Standardize participant status and enhance invitation UI&#10;&#10;Refactors participant status strings for consistency:&#10;- `CONFIRMED` is now `accepted`&#10;- `CANCELLED` is now `declined`&#10;- `SELECTED` is now `invited`&#10;&#10;Enhances the event invitation screen:&#10;- Fetches and displays event details (title, time, location, price, description).&#10;- Removes the real-time status listener (`listenToParticipantStatus`) in favor of a simpler, one-time action UI.&#10;- Adds null checks for `eventId` and `userId` in `EventInvitationActivity` to prevent potential crashes.&#10;- Improves logging in `EventRepository` for better debugging." />
+      <created>1763680089785</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1763680089785</updated>
+    </task>
+    <task id="LOCAL-00001" summary="feat: Add &quot;Notify Selected Entrants&quot; button and functionality&#10;&#10;Adds a &quot;Notify Selected Entrants&quot; button to the organizer's event details screen. This allows organizers to send a bulk notification to all participants who have been selected for the event.&#10;&#10;- Implements `notifyAllSelectedEntrants` in `EventRepository` to fetch participants with a &quot;SELECTED&quot; status and send them a notification.&#10;- Adds a placeholder `sendNotificationToUser` method for future FCM integration.&#10;- Adds the &quot;Notify Selected Entrants&quot; button to the `org_my_event_details_activity.xml` layout.&#10;- In `OrgMyEventDetailsActivity`, a confirmation dialog is now displayed before sending notifications to prevent accidental sends.">
+      <option name="closed" value="true" />
+      <created>1763681104640</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1763681104640</updated>
+    </task>
+    <task id="LOCAL-00002" summary="feat: Add &quot;Edit Event&quot; button and functionality&#10;&#10;Adds an &quot;Edit Event&quot; button to the organizer's event details screen, allowing organizers to navigate to the event editing page.&#10;&#10;- Adds the &quot;Edit Event&quot; button to the `org_my_event_details_activity.xml` layout.&#10;- Implements an `onClickListener` for the new button in `OrgMyEventDetailsActivity` to launch the `EditEventActivity`.">
+      <option name="closed" value="true" />
+      <created>1763945644176</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1763945644176</updated>
+    </task>
+    <task id="LOCAL-00003" summary="fix: Update Edit Event button and layout&#10;&#10;- Updates the `OrgMyEventDetailsActivity` to launch `OrgEditEventActivity` instead of `EditEventActivity` when the &quot;Edit Event&quot; button is clicked.&#10;- Reorders the buttons in the `org_my_event_details_activity.xml` layout for better organization.">
+      <option name="closed" value="true" />
+      <created>1763947402133</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1763947402133</updated>
+    </task>
+    <task id="LOCAL-00004" summary="style: Remove trailing newline&#10;&#10;Removes a trailing newline character from the end of `OrgMyEventDetailsActivity.java`.">
+      <option name="closed" value="true" />
+      <created>1763948994393</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1763948994393</updated>
+    </task>
+    <task id="LOCAL-00005" summary="fix: Remove duplicate editButton declaration and unused code&#10;&#10;Removes a duplicate declaration of the `editButton` variable. Also deletes an unused `onClickListener` for the `editButton` and the initialization for a non-existent `eventImage` ImageView.">
+      <option name="closed" value="true" />
+      <created>1763974602576</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1763974602576</updated>
+    </task>
+    <task id="LOCAL-00006" summary="test: Add instrumented tests for EventRepository&#10;&#10;Adds a new Android instrumented test class, `EventRepositoryTest`, to verify the functionality of `notifyAllSelectedEntrants`.&#10;&#10;- **testNotifyAllSelectedEntrants_Success:** Verifies that the success callback is triggered when there are selected entrants.&#10;- **testNotifyAllSelectedEntrants_OnlyNotifiesSelectedUsers:** Ensures that the logic correctly identifies and targets only participants with a &quot;SELECTED&quot; status.&#10;- **testNotifyAllSelectedEntrants_NoSelectedUsers:** Confirms that the function completes successfully even if there are no selected participants for an event.&#10;- **testNotifyAllSelectedEntrants_InvalidEventId:** Checks that the function handles non-existent event IDs gracefully without errors.">
+      <option name="closed" value="true" />
+      <created>1763975039852</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1763975039852</updated>
+    </task>
+    <task id="LOCAL-00007" summary="feat: Add bulk notification for waiting list and cancelled entrants&#10;&#10;Adds functionality to send bulk notifications to participants based on their status.&#10;&#10;- Implements `notifyAllWaitingListEntrants` to send notifications to all users with a &quot;PENDING&quot; status.&#10;- Implements `notifyAllCancelledEntrants` to send notifications to all users with a &quot;CANCELLED&quot; status.&#10;- Adds `logNotificationSent` to record notification metadata in a new `notificationLogs` collection for auditing purposes.">
+      <option name="closed" value="true" />
+      <created>1763975754730</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1763975754730</updated>
+    </task>
+    <task id="LOCAL-00008" summary="refactor: Simplify Javadocs and add notification logging&#10;&#10;Refactors the `EventRepository` class by removing redundant and overly descriptive Javadoc comments for multiple methods, making the documentation more concise.&#10;&#10;- Adds calls to `logNotificationSent` within `notifyAllSelectedEntrants`, `notifyAllWaitingListEntrants`, and `notifyAllCancelledEntrants` to create an audit log for bulk notifications.&#10;- Removes a trailing newline character from the end of the file.">
+      <option name="closed" value="true" />
+      <created>1764101579312</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1764101579312</updated>
+    </task>
+    <task id="LOCAL-00009" summary="docs: Add and improve Javadocs for EventRepository methods&#10;&#10;Adds and refines the documentation for public methods within the `EventRepository` class. This includes documenting the purpose, parameters, and return values for the following methods:&#10;&#10;- `updateParticipantStatus`&#10;- `acceptInvitation`&#10;- `declineInvitation`&#10;- `inviteNextFromWaitingList`&#10;- `listenToParticipantStatus`">
+      <option name="closed" value="true" />
+      <created>1764107409430</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1764107409430</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="origin/US02.07.02_sendnotificationtoselectedentrants" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="feat: Add &quot;Notify Selected Entrants&quot; button and functionality&#10;&#10;Adds a &quot;Notify Selected Entrants&quot; button to the organizer's event details screen. This allows organizers to send a bulk notification to all participants who have been selected for the event.&#10;&#10;- Implements `notifyAllSelectedEntrants` in `EventRepository` to fetch participants with a &quot;SELECTED&quot; status and send them a notification.&#10;- Adds a placeholder `sendNotificationToUser` method for future FCM integration.&#10;- Adds the &quot;Notify Selected Entrants&quot; button to the `org_my_event_details_activity.xml` layout.&#10;- In `OrgMyEventDetailsActivity`, a confirmation dialog is now displayed before sending notifications to prevent accidental sends." />
+    <MESSAGE value="feat: Add &quot;Edit Event&quot; button and functionality&#10;&#10;Adds an &quot;Edit Event&quot; button to the organizer's event details screen, allowing organizers to navigate to the event editing page.&#10;&#10;- Adds the &quot;Edit Event&quot; button to the `org_my_event_details_activity.xml` layout.&#10;- Implements an `onClickListener` for the new button in `OrgMyEventDetailsActivity` to launch the `EditEventActivity`." />
+    <MESSAGE value="fix: Update Edit Event button and layout&#10;&#10;- Updates the `OrgMyEventDetailsActivity` to launch `OrgEditEventActivity` instead of `EditEventActivity` when the &quot;Edit Event&quot; button is clicked.&#10;- Reorders the buttons in the `org_my_event_details_activity.xml` layout for better organization." />
+    <MESSAGE value="style: Remove trailing newline&#10;&#10;Removes a trailing newline character from the end of `OrgMyEventDetailsActivity.java`." />
+    <MESSAGE value="fix: Remove duplicate editButton declaration and unused code&#10;&#10;Removes a duplicate declaration of the `editButton` variable. Also deletes an unused `onClickListener` for the `editButton` and the initialization for a non-existent `eventImage` ImageView." />
+    <MESSAGE value="test: Add instrumented tests for EventRepository&#10;&#10;Adds a new Android instrumented test class, `EventRepositoryTest`, to verify the functionality of `notifyAllSelectedEntrants`.&#10;&#10;- **testNotifyAllSelectedEntrants_Success:** Verifies that the success callback is triggered when there are selected entrants.&#10;- **testNotifyAllSelectedEntrants_OnlyNotifiesSelectedUsers:** Ensures that the logic correctly identifies and targets only participants with a &quot;SELECTED&quot; status.&#10;- **testNotifyAllSelectedEntrants_NoSelectedUsers:** Confirms that the function completes successfully even if there are no selected participants for an event.&#10;- **testNotifyAllSelectedEntrants_InvalidEventId:** Checks that the function handles non-existent event IDs gracefully without errors." />
+    <MESSAGE value="feat: Add bulk notification for waiting list and cancelled entrants&#10;&#10;Adds functionality to send bulk notifications to participants based on their status.&#10;&#10;- Implements `notifyAllWaitingListEntrants` to send notifications to all users with a &quot;PENDING&quot; status.&#10;- Implements `notifyAllCancelledEntrants` to send notifications to all users with a &quot;CANCELLED&quot; status.&#10;- Adds `logNotificationSent` to record notification metadata in a new `notificationLogs` collection for auditing purposes." />
+    <MESSAGE value="refactor: Simplify Javadocs and add notification logging&#10;&#10;Refactors the `EventRepository` class by removing redundant and overly descriptive Javadoc comments for multiple methods, making the documentation more concise.&#10;&#10;- Adds calls to `logNotificationSent` within `notifyAllSelectedEntrants`, `notifyAllWaitingListEntrants`, and `notifyAllCancelledEntrants` to create an audit log for bulk notifications.&#10;- Removes a trailing newline character from the end of the file." />
+    <MESSAGE value="docs: Add and improve Javadocs for EventRepository methods&#10;&#10;Adds and refines the documentation for public methods within the `EventRepository` class. This includes documenting the purpose, parameters, and return values for the following methods:&#10;&#10;- `updateParticipantStatus`&#10;- `acceptInvitation`&#10;- `declineInvitation`&#10;- `inviteNextFromWaitingList`&#10;- `listenToParticipantStatus`" />
+    <option name="LAST_COMMIT_MESSAGE" value="docs: Add and improve Javadocs for EventRepository methods&#10;&#10;Adds and refines the documentation for public methods within the `EventRepository` class. This includes documenting the purpose, parameters, and return values for the following methods:&#10;&#10;- `updateParticipantStatus`&#10;- `acceptInvitation`&#10;- `declineInvitation`&#10;- `inviteNextFromWaitingList`&#10;- `listenToParticipantStatus`" />
+  </component>
+</project>

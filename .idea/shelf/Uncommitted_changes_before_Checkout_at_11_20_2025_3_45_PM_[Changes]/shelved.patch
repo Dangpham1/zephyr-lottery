@@ -1,0 +1,352 @@
+Index: code/app/src/main/java/com/example/zephyr_lottery/repositories/EventRepository.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package com.example.zephyr_lottery.repositories;\r\n\r\nimport android.util.Log;\r\n\r\nimport com.example.zephyr_lottery.models.Participant;\r\nimport com.google.android.gms.tasks.Task;\r\nimport com.google.firebase.Timestamp;\r\nimport com.google.firebase.firestore.*;\r\n\r\nimport java.util.List;\r\nimport java.util.function.Consumer;\r\n\r\n/**\r\n * This class manages the statuses of participants and the accepting/declining of invitations.\r\n */\r\npublic class EventRepository {\r\n    private final FirebaseFirestore db = FirebaseFirestore.getInstance();\r\n\r\n    /**\r\n     * Changes the status of a specified participant in an event\r\n     * @param eventId\r\n     *  The event ID that the participant is in the lottery for\r\n     * @param userId\r\n     *  The participant's ID\r\n     * @param status\r\n     *  The new status of the participant\r\n     * @return\r\n     *  Returns a Task when completed asynchronously\r\n     */\r\n    public Task<Void> updateParticipantStatus(String eventId, String userId, String status) {\r\n        DocumentReference participantRef = db.collection(\"events\")\r\n                .document(eventId)\r\n                .collection(\"participants\")\r\n                .document(userId);\r\n\r\n        Participant p = new Participant(userId, status, null, Timestamp.now());\r\n        return participantRef.set(p, SetOptions.merge());\r\n    }\r\n\r\n    /**\r\n     * Accepts the invitation (called when the accept button from the notification screen is pushed)\r\n     * @param eventId\r\n     *  The ID of the event that the participant is accepting\r\n     * @param userId\r\n     *  The ID of the participant\r\n     * @param onSuccess\r\n     *  Runnable function if the invitation is properly accepted\r\n     * @param onError\r\n     *  Exception if the invitation is not properly accepted\r\n     */\r\n    public void acceptInvitation(String eventId, String userId,\r\n                                 Runnable onSuccess, Consumer<Exception> onError) {\r\n        updateParticipantStatus(eventId, userId, \"CONFIRMED\")\r\n                .addOnSuccessListener(v -> {\r\n                    Log.d(\"EventRepo\", \"Accepted invitation\");\r\n                    if (onSuccess != null) onSuccess.run();\r\n                })\r\n                .addOnFailureListener(e -> {\r\n                    Log.e(\"EventRepo\", \"Accept failed\", e);\r\n                    if (onError != null) onError.accept(e);\r\n                });\r\n    }\r\n\r\n    /**\r\n     * Declines the invitation, then invites next participant from the waiting list (called when the decline button from the notification screen is pushed)\r\n     * @param eventId\r\n     *  The ID of the event that the participant is declining\r\n     * @param userId\r\n     *  The ID of the participant\r\n     * @param onSuccess\r\n     *  Runnable function if the invitation is properly declined\r\n     * @param onError\r\n     *  Exception if the invitation is not properly declined\r\n     */\r\n    public void declineInvitation(String eventId, String userId,\r\n                                  Runnable onSuccess, Consumer<Exception> onError) {\r\n        updateParticipantStatus(eventId, userId, \"CANCELLED\")\r\n                .addOnSuccessListener(v -> {\r\n                    Log.d(\"EventRepo\", \"Declined invitation\");\r\n                    inviteNextFromWaitingList(eventId, onSuccess, onError);\r\n                })\r\n                .addOnFailureListener(e -> {\r\n                    Log.e(\"EventRepo\", \"Decline failed\", e);\r\n                    if (onError != null) onError.accept(e);\r\n                });\r\n    }\r\n\r\n    /**\r\n     * Invites the next participant from the waiting list, based on the oldest joinedAt\r\n     * @param eventId\r\n     *  The ID of the event\r\n     * @param onSuccess\r\n     *  Runnable function if the invitation is successfully sent\r\n     * @param onError\r\n     *  Exception if the invitation is not properly sent\r\n     */\r\n    public void inviteNextFromWaitingList(String eventId,\r\n                                          Runnable onSuccess,\r\n                                          Consumer<Exception> onError) {\r\n        CollectionReference waitingRef = db.collection(\"events\")\r\n                .document(eventId)\r\n                .collection(\"waitingList\");\r\n\r\n        waitingRef.orderBy(\"joinedAt\", Query.Direction.ASCENDING)\r\n                .limit(1)\r\n                .get()\r\n                .addOnSuccessListener(query -> {\r\n                    List<DocumentSnapshot> docs = query.getDocuments();\r\n                    if (docs.isEmpty()) {\r\n                        Log.d(\"EventRepo\", \"No waiting list entrants\");\r\n                        if (onSuccess != null) onSuccess.run();\r\n                        return;\r\n                    }\r\n                    DocumentSnapshot next = docs.get(0);\r\n                    String nextUserId = next.getId(); // waitingList docId == userId (recommended)\r\n\r\n                    WriteBatch batch = db.batch();\r\n\r\n                    DocumentReference participantRef = db.collection(\"events\")\r\n                            .document(eventId)\r\n                            .collection(\"participants\")\r\n                            .document(nextUserId);\r\n\r\n                    Participant invited = new Participant(\r\n                            nextUserId, \"SELECTED\", Timestamp.now(), Timestamp.now()\r\n                    );\r\n\r\n                    batch.set(participantRef, invited, SetOptions.merge());\r\n                    batch.delete(next.getReference()); // remove from waiting list\r\n\r\n                    batch.commit()\r\n                            .addOnSuccessListener(bv -> {\r\n                                Log.d(\"EventRepo\", \"Invited next entrant: \" + nextUserId);\r\n                                if (onSuccess != null) onSuccess.run();\r\n                            })\r\n                            .addOnFailureListener(e -> {\r\n                                Log.e(\"EventRepo\", \"Failed inviting next entrant\", e);\r\n                                if (onError != null) onError.accept(e);\r\n                            });\r\n                })\r\n                .addOnFailureListener(e -> {\r\n                    Log.e(\"EventRepo\", \"Read waiting list failed\", e);\r\n                    if (onError != null) onError.accept(e);\r\n                });\r\n    }\r\n\r\n    // Listen to participant status for current user to toggle UI\r\n\r\n    /**\r\n     * Sets a listener for any changes in status in the database, to update the list in real time\r\n     * @param eventId\r\n     *  The current ID of the event\r\n     * @param userId\r\n     *  The current user ID to track\r\n     * @param onStatus\r\n     *  Collects the status changes\r\n     * @return\r\n     *  Returns a ListenerRegistration that listens for status changes\r\n     */\r\n    public ListenerRegistration listenToParticipantStatus(String eventId, String userId,\r\n                                                          Consumer<String> onStatus) {\r\n        DocumentReference ref = db.collection(\"events\")\r\n                .document(eventId)\r\n                .collection(\"participants\")\r\n                .document(userId);\r\n\r\n        return ref.addSnapshotListener((snap, error) -> {\r\n            if (error != null) {\r\n                Log.e(\"EventRepo\", \"Listen error\", error);\r\n                return;\r\n            }\r\n            String status = (snap != null && snap.exists()) ? snap.getString(\"status\") : null;\r\n            if (onStatus != null) onStatus.accept(status);\r\n        });\r\n    }\r\n}
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/code/app/src/main/java/com/example/zephyr_lottery/repositories/EventRepository.java b/code/app/src/main/java/com/example/zephyr_lottery/repositories/EventRepository.java
+--- a/code/app/src/main/java/com/example/zephyr_lottery/repositories/EventRepository.java	(revision 90cdc5cd46b0369f5e2d79b8721da1c807ecad9f)
++++ b/code/app/src/main/java/com/example/zephyr_lottery/repositories/EventRepository.java	(date 1763675698954)
+@@ -10,23 +10,10 @@
+ import java.util.List;
+ import java.util.function.Consumer;
+ 
+-/**
+- * This class manages the statuses of participants and the accepting/declining of invitations.
+- */
+ public class EventRepository {
+     private final FirebaseFirestore db = FirebaseFirestore.getInstance();
+ 
+-    /**
+-     * Changes the status of a specified participant in an event
+-     * @param eventId
+-     *  The event ID that the participant is in the lottery for
+-     * @param userId
+-     *  The participant's ID
+-     * @param status
+-     *  The new status of the participant
+-     * @return
+-     *  Returns a Task when completed asynchronously
+-     */
++    // Update participant status (accepted/declined)
+     public Task<Void> updateParticipantStatus(String eventId, String userId, String status) {
+         DocumentReference participantRef = db.collection("events")
+                 .document(eventId)
+@@ -37,22 +24,12 @@
+         return participantRef.set(p, SetOptions.merge());
+     }
+ 
+-    /**
+-     * Accepts the invitation (called when the accept button from the notification screen is pushed)
+-     * @param eventId
+-     *  The ID of the event that the participant is accepting
+-     * @param userId
+-     *  The ID of the participant
+-     * @param onSuccess
+-     *  Runnable function if the invitation is properly accepted
+-     * @param onError
+-     *  Exception if the invitation is not properly accepted
+-     */
++    // Accept invitation
+     public void acceptInvitation(String eventId, String userId,
+                                  Runnable onSuccess, Consumer<Exception> onError) {
+-        updateParticipantStatus(eventId, userId, "CONFIRMED")
++        updateParticipantStatus(eventId, userId, "accepted")
+                 .addOnSuccessListener(v -> {
+-                    Log.d("EventRepo", "Accepted invitation");
++                    Log.d("EventRepo", "Accepted invitation for user " + userId);
+                     if (onSuccess != null) onSuccess.run();
+                 })
+                 .addOnFailureListener(e -> {
+@@ -61,22 +38,12 @@
+                 });
+     }
+ 
+-    /**
+-     * Declines the invitation, then invites next participant from the waiting list (called when the decline button from the notification screen is pushed)
+-     * @param eventId
+-     *  The ID of the event that the participant is declining
+-     * @param userId
+-     *  The ID of the participant
+-     * @param onSuccess
+-     *  Runnable function if the invitation is properly declined
+-     * @param onError
+-     *  Exception if the invitation is not properly declined
+-     */
++    // Decline invitation, then invite next from waiting list
+     public void declineInvitation(String eventId, String userId,
+                                   Runnable onSuccess, Consumer<Exception> onError) {
+-        updateParticipantStatus(eventId, userId, "CANCELLED")
++        updateParticipantStatus(eventId, userId, "declined")
+                 .addOnSuccessListener(v -> {
+-                    Log.d("EventRepo", "Declined invitation");
++                    Log.d("EventRepo", "Declined invitation for user " + userId);
+                     inviteNextFromWaitingList(eventId, onSuccess, onError);
+                 })
+                 .addOnFailureListener(e -> {
+@@ -85,15 +52,7 @@
+                 });
+     }
+ 
+-    /**
+-     * Invites the next participant from the waiting list, based on the oldest joinedAt
+-     * @param eventId
+-     *  The ID of the event
+-     * @param onSuccess
+-     *  Runnable function if the invitation is successfully sent
+-     * @param onError
+-     *  Exception if the invitation is not properly sent
+-     */
++    // Invite next waiting list entrant (FIFO by joinedAt)
+     public void inviteNextFromWaitingList(String eventId,
+                                           Runnable onSuccess,
+                                           Consumer<Exception> onError) {
+@@ -107,12 +66,13 @@
+                 .addOnSuccessListener(query -> {
+                     List<DocumentSnapshot> docs = query.getDocuments();
+                     if (docs.isEmpty()) {
+-                        Log.d("EventRepo", "No waiting list entrants");
++                        Log.d("EventRepo", "No waiting list entrants for event " + eventId);
+                         if (onSuccess != null) onSuccess.run();
+                         return;
+                     }
++
+                     DocumentSnapshot next = docs.get(0);
+-                    String nextUserId = next.getId(); // waitingList docId == userId (recommended)
++                    String nextUserId = next.getId();
+ 
+                     WriteBatch batch = db.batch();
+ 
+@@ -122,7 +82,7 @@
+                             .document(nextUserId);
+ 
+                     Participant invited = new Participant(
+-                            nextUserId, "SELECTED", Timestamp.now(), Timestamp.now()
++                            nextUserId, "invited", Timestamp.now(), Timestamp.now()
+                     );
+ 
+                     batch.set(participantRef, invited, SetOptions.merge());
+@@ -143,34 +103,4 @@
+                     if (onError != null) onError.accept(e);
+                 });
+     }
+-
+-    // Listen to participant status for current user to toggle UI
+-
+-    /**
+-     * Sets a listener for any changes in status in the database, to update the list in real time
+-     * @param eventId
+-     *  The current ID of the event
+-     * @param userId
+-     *  The current user ID to track
+-     * @param onStatus
+-     *  Collects the status changes
+-     * @return
+-     *  Returns a ListenerRegistration that listens for status changes
+-     */
+-    public ListenerRegistration listenToParticipantStatus(String eventId, String userId,
+-                                                          Consumer<String> onStatus) {
+-        DocumentReference ref = db.collection("events")
+-                .document(eventId)
+-                .collection("participants")
+-                .document(userId);
+-
+-        return ref.addSnapshotListener((snap, error) -> {
+-            if (error != null) {
+-                Log.e("EventRepo", "Listen error", error);
+-                return;
+-            }
+-            String status = (snap != null && snap.exists()) ? snap.getString("status") : null;
+-            if (onStatus != null) onStatus.accept(status);
+-        });
+-    }
+ }
+\ No newline at end of file
+Index: code/app/src/main/res/layout/activity_event_invitation.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<LinearLayout xmlns:android=\"http://schemas.android.com/apk/res/android\"\r\n    android:id=\"@+id/invitation_root\"\r\n    android:layout_width=\"match_parent\"\r\n    android:layout_height=\"match_parent\"\r\n    android:padding=\"16dp\"\r\n    android:orientation=\"vertical\">\r\n\r\n    <!-- You can add event details here (name, time, location) via TextViews -->\r\n\r\n    <Button\r\n        android:id=\"@+id/btnAccept\"\r\n        android:layout_width=\"match_parent\"\r\n        android:layout_height=\"wrap_content\"\r\n        android:text=\"Accept\"\r\n        android:enabled=\"false\" />\r\n\r\n    <Button\r\n        android:id=\"@+id/btnDecline\"\r\n        android:layout_width=\"match_parent\"\r\n        android:layout_height=\"wrap_content\"\r\n        android:text=\"Decline\"\r\n        android:layout_marginTop=\"12dp\"\r\n        android:enabled=\"false\" />\r\n\r\n</LinearLayout>\r\n\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/code/app/src/main/res/layout/activity_event_invitation.xml b/code/app/src/main/res/layout/activity_event_invitation.xml
+--- a/code/app/src/main/res/layout/activity_event_invitation.xml	(revision 90cdc5cd46b0369f5e2d79b8721da1c807ecad9f)
++++ b/code/app/src/main/res/layout/activity_event_invitation.xml	(date 1763675669524)
+@@ -1,27 +1,44 @@
+-<?xml version="1.0" encoding="utf-8"?>
+ <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:id="@+id/invitation_root"
+     android:layout_width="match_parent"
+     android:layout_height="match_parent"
+-    android:padding="16dp"
+-    android:orientation="vertical">
++    android:orientation="vertical"
++    android:padding="16dp">
+ 
+-    <!-- You can add event details here (name, time, location) via TextViews -->
+-
+-    <Button
+-        android:id="@+id/btnAccept"
++    <TextView
++        android:id="@+id/text_event_title"
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+-        android:text="Accept"
+-        android:enabled="false" />
++        android:text="Event Title"
++        android:textSize="24sp"
++        android:textStyle="bold"
++        android:paddingBottom="8dp"/>
++
++    <TextView
++        android:id="@+id/text_event_time"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="Event Time"/>
+ 
+-    <Button
+-        android:id="@+id/btnDecline"
++    <TextView
++        android:id="@+id/text_event_location"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="Location"/>
++
++    <TextView
++        android:id="@+id/text_event_price"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="Price"/>
++
++    <TextView
++        android:id="@+id/text_event_description"
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+-        android:text="Decline"
+-        android:layout_marginTop="12dp"
+-        android:enabled="false" />
++        android:text="Description"
++        android:paddingBottom="16dp"/>
+ 
+-</LinearLayout>
+-
++    <Button
++        android:id="@+id/btnAccept"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content
+\ No newline at end of file
+Index: code/app/src/main/java/com/example/zephyr_lottery/activities/EventInvitationActivity.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package com.example.zephyr_lottery.activities;\r\n\r\nimport android.os.Bundle;\r\nimport android.widget.Button;\r\nimport android.widget.Toast;\r\n\r\nimport androidx.appcompat.app.AlertDialog;\r\nimport androidx.appcompat.app.AppCompatActivity;\r\n\r\nimport com.example.zephyr_lottery.R;\r\nimport com.example.zephyr_lottery.repositories.EventRepository;\r\nimport com.google.firebase.firestore.ListenerRegistration;\r\n\r\npublic class EventInvitationActivity extends AppCompatActivity {\r\n\r\n    private EventRepository repo;\r\n    private String eventId;\r\n    private String userId;\r\n\r\n    private Button btnAccept;\r\n    private Button btnDecline;\r\n\r\n    private ListenerRegistration statusListener;\r\n\r\n    @Override\r\n    protected void onCreate(Bundle savedInstanceState) {\r\n        super.onCreate(savedInstanceState);\r\n        setContentView(R.layout.activity_event_invitation);\r\n\r\n        repo = new EventRepository();\r\n\r\n        eventId = getIntent().getStringExtra(\"EVENT_ID\");\r\n        userId = getIntent().getStringExtra(\"USER_ID\");\r\n\r\n        btnAccept = findViewById(R.id.btnAccept);\r\n        btnDecline = findViewById(R.id.btnDecline);\r\n\r\n        btnAccept.setOnClickListener(v ->\r\n                new AlertDialog.Builder(this)\r\n                        .setTitle(\"Accept invitation?\")\r\n                        .setMessage(\"Confirm you want to participate.\")\r\n                        .setPositiveButton(\"Accept\", (d, w) ->\r\n                                repo.acceptInvitation(eventId, userId,\r\n                                        () -> Toast.makeText(this, \"Accepted\", Toast.LENGTH_SHORT).show(),\r\n                                        e -> Toast.makeText(this, \"Failed to accept\", Toast.LENGTH_SHORT).show()))\r\n                        .setNegativeButton(\"Cancel\", null)\r\n                        .show()\r\n        );\r\n\r\n        btnDecline.setOnClickListener(v ->\r\n                new AlertDialog.Builder(this)\r\n                        .setTitle(\"Decline invitation?\")\r\n                        .setMessage(\"Confirm you want to decline. The next entrant may be invited.\")\r\n                        .setPositiveButton(\"Decline\", (d, w) ->\r\n                                repo.declineInvitation(eventId, userId,\r\n                                        () -> Toast.makeText(this, \"Declined\", Toast.LENGTH_SHORT).show(),\r\n                                        e -> Toast.makeText(this, \"Failed to decline\", Toast.LENGTH_SHORT).show()))\r\n                        .setNegativeButton(\"Cancel\", null)\r\n                        .show()\r\n        );\r\n    }\r\n\r\n    @Override\r\n    protected void onStart() {\r\n        super.onStart();\r\n        statusListener = repo.listenToParticipantStatus(eventId, userId, status -> {\r\n            boolean invited = \"invited\".equals(status);\r\n            btnAccept.setEnabled(invited);\r\n            btnDecline.setEnabled(invited);\r\n\r\n            if (\"accepted\".equals(status) || \"declined\".equals(status) || status == null) {\r\n                btnAccept.setEnabled(false);\r\n                btnDecline.setEnabled(false);\r\n            }\r\n        });\r\n    }\r\n\r\n    @Override\r\n    protected void onStop() {\r\n        super.onStop();\r\n        if (statusListener != null) statusListener.remove();\r\n    }\r\n}
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/code/app/src/main/java/com/example/zephyr_lottery/activities/EventInvitationActivity.java b/code/app/src/main/java/com/example/zephyr_lottery/activities/EventInvitationActivity.java
+--- a/code/app/src/main/java/com/example/zephyr_lottery/activities/EventInvitationActivity.java	(revision 90cdc5cd46b0369f5e2d79b8721da1c807ecad9f)
++++ b/code/app/src/main/java/com/example/zephyr_lottery/activities/EventInvitationActivity.java	(date 1763675798117)
+@@ -2,6 +2,7 @@
+ 
+ import android.os.Bundle;
+ import android.widget.Button;
++import android.widget.TextView;
+ import android.widget.Toast;
+ 
+ import androidx.appcompat.app.AlertDialog;
+@@ -9,7 +10,7 @@
+ 
+ import com.example.zephyr_lottery.R;
+ import com.example.zephyr_lottery.repositories.EventRepository;
+-import com.google.firebase.firestore.ListenerRegistration;
++import com.google.firebase.firestore.FirebaseFirestore;
+ 
+ public class EventInvitationActivity extends AppCompatActivity {
+ 
+@@ -20,7 +21,7 @@
+     private Button btnAccept;
+     private Button btnDecline;
+ 
+-    private ListenerRegistration statusListener;
++    private TextView textEventTitle, textEventTime, textEventLocation, textEventPrice, textEventDescription;
+ 
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+@@ -32,9 +33,42 @@
+         eventId = getIntent().getStringExtra("EVENT_ID");
+         userId = getIntent().getStringExtra("USER_ID");
+ 
++        if (eventId == null || userId == null) {
++            Toast.makeText(this, "Error: missing event/user ID", Toast.LENGTH_LONG).show();
++            finish();
++            return;
++        }
++
++        // Bind views
++        textEventTitle = findViewById(R.id.text_event_title);
++        textEventTime = findViewById(R.id.text_event_time);
++        textEventLocation = findViewById(R.id.text_event_location);
++        textEventPrice = findViewById(R.id.text_event_price);
++        textEventDescription = findViewById(R.id.text_event_description);
++
+         btnAccept = findViewById(R.id.btnAccept);
+         btnDecline = findViewById(R.id.btnDecline);
+ 
++        // Fetch event details
++        FirebaseFirestore db = FirebaseFirestore.getInstance();
++        db.collection("events").document(eventId).get()
++                .addOnSuccessListener(snapshot -> {
++                    if (snapshot.exists()) {
++                        textEventTitle.setText(snapshot.getString("name"));
++                        textEventTime.setText(snapshot.getString("time"));
++                        textEventLocation.setText(snapshot.getString("location"));
++                        Double price = snapshot.getDouble("price");
++                        textEventPrice.setText(price != null ? "Price: $" + price : "Price: N/A");
++                        textEventDescription.setText(snapshot.getString("description"));
++                    } else {
++                        textEventTitle.setText("Event not found");
++                    }
++                })
++                .addOnFailureListener(e -> {
++                    textEventTitle.setText("Event details unavailable");
++                });
++
++        // Accept button
+         btnAccept.setOnClickListener(v ->
+                 new AlertDialog.Builder(this)
+                         .setTitle("Accept invitation?")
+@@ -47,6 +81,7 @@
+                         .show()
+         );
+ 
++        // Decline button
+         btnDecline.setOnClickListener(v ->
+                 new AlertDialog.Builder(this)
+                         .setTitle("Decline invitation?")
+@@ -59,25 +94,4 @@
+                         .show()
+         );
+     }
+-
+-    @Override
+-    protected void onStart() {
+-        super.onStart();
+-        statusListener = repo.listenToParticipantStatus(eventId, userId, status -> {
+-            boolean invited = "invited".equals(status);
+-            btnAccept.setEnabled(invited);
+-            btnDecline.setEnabled(invited);
+-
+-            if ("accepted".equals(status) || "declined".equals(status) || status == null) {
+-                btnAccept.setEnabled(false);
+-                btnDecline.setEnabled(false);
+-            }
+-        });
+-    }
+-
+-    @Override
+-    protected void onStop() {
+-        super.onStop();
+-        if (statusListener != null) statusListener.remove();
+-    }
+ }
+\ No newline at end of file
