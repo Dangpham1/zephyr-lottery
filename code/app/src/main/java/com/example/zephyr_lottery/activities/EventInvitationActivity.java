@@ -64,7 +64,7 @@ public class EventInvitationActivity extends AppCompatActivity {
     protected void onStart() {
         super.onStart();
         statusListener = repo.listenToParticipantStatus(eventId, userId, status -> {
-            boolean invited = "invited".equals(status);
+            boolean invited = "SELECTED".equals(status);
             btnAccept.setEnabled(invited);
             btnDecline.setEnabled(invited);
 

@@ -19,6 +19,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.example.zephyr_lottery.Event;
 import com.example.zephyr_lottery.R;
+import com.example.zephyr_lottery.repositories.EventRepository;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FirebaseFirestore;
 
@@ -27,8 +28,9 @@ import java.util.Collections;
 
 public class OrgMyEventDetailsActivity extends AppCompatActivity {
 
-    private FirebaseFirestore db;
+    private final FirebaseFirestore db = FirebaseFirestore.getInstance();
     private static final String TAG = "OrgMyEventDetails";
+    private final EventRepository repo = new EventRepository();
 
     private TextView detailsText;
     private ImageView eventImage;
@@ -54,7 +56,6 @@ public class OrgMyEventDetailsActivity extends AppCompatActivity {
             return insets;
         });
 
-        db = FirebaseFirestore.getInstance();
 
         eventCode = getIntent().getIntExtra("EVENT_CLICKED_CODE", -1);
         userEmail = getIntent().getStringExtra("USER_EMAIL");
@@ -108,6 +109,16 @@ public class OrgMyEventDetailsActivity extends AppCompatActivity {
             db.collection("events").document(Integer.toString(eventCode))
                     .update("winners", winners)
                     .addOnSuccessListener(aVoid -> {
+                        // Update each winner’s status to SELECTED
+                        String eventIdStr = Integer.toString(eventCode);
+                        for (String winnerId : winners) {
+                            repo.updateParticipantStatus(eventIdStr, winnerId, "SELECTED");
+                        }
+                        // Optionally send invitations via notifications
+                        repo.notifyAllSelectedEntrants(eventIdStr,
+                                () -> Log.d(TAG, "Invitations sent to winners"),
+                                e -> Log.e(TAG, "Failed to send invitations", e));
+
                         Toast.makeText(this, "Winners saved!", Toast.LENGTH_SHORT).show();
                         Intent intent = new Intent(OrgMyEventDetailsActivity.this, DrawWinnersPopupActivity.class);
                         intent.putStringArrayListExtra("WINNERS", winners);

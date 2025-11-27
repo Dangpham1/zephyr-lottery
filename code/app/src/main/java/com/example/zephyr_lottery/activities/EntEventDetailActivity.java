@@ -3,7 +3,6 @@ package com.example.zephyr_lottery.activities;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.media.Image;
 import android.os.Bundle;
 import android.util.Base64;
 import android.util.Log;
@@ -20,12 +19,14 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.example.zephyr_lottery.R;
+import com.example.zephyr_lottery.repositories.EventRepository;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.CollectionReference;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +52,12 @@ public class EntEventDetailActivity extends AppCompatActivity {
     private CollectionReference eventsRef;
     private DocumentReference docRef;
 
+    // New fields to handle invitation logic
+    private EventRepository repo;
+    private ListenerRegistration statusListener;
+    private String currentEventId;
+    private String currentUserId;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -62,6 +69,7 @@ public class EntEventDetailActivity extends AppCompatActivity {
             return insets;
         });
 
+        // Initialize UI components
         title = findViewById(R.id.textView_ed_title);
         closingDate = findViewById(R.id.textView_closingdate);
         startEnd = findViewById(R.id.textView_startenddates);
@@ -77,6 +85,7 @@ public class EntEventDetailActivity extends AppCompatActivity {
         leave_button = findViewById(R.id.button_leave_waitlist);
         back_event_details_button = findViewById(R.id.button_event_details_back);
 
+        // Determine current user email (from intent or FirebaseAuth)
         String user_email = getIntent().getStringExtra("USER_EMAIL");
         if (user_email == null || user_email.isEmpty()) {
             FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
@@ -86,18 +95,28 @@ public class EntEventDetailActivity extends AppCompatActivity {
         }
         final String currentUserEmail = user_email;
 
-        String eventHash = getIntent().getStringExtra("EVENT");
+        // Save user ID and event ID as fields for use in onStart
+        this.currentUserId = currentUserEmail;
 
+        // Determine event ID (document id)
+        String eventHash = getIntent().getStringExtra("EVENT");
+        this.currentEventId = eventHash;
+
+        // Set up Firestore references
         db = FirebaseFirestore.getInstance();
         eventsRef = db.collection("events");
         docRef = eventsRef.document(eventHash);
 
+        // Initialize the repository
+        repo = new EventRepository();
+
+        // Load event details onto the screen
         loadEventDetails();
 
-        String finalUserEmail = currentUserEmail;
-
+        // Set up button listeners
         register_button.setOnClickListener(view -> {
-            if (finalUserEmail == null || finalUserEmail.isEmpty()) {
+            // join waiting list logic (unchanged)
+            if (currentUserEmail == null || currentUserEmail.isEmpty()) {
                 Toast.makeText(
                         EntEventDetailActivity.this,
                         "Unable to determine your account. Please sign in again.",
@@ -124,7 +143,7 @@ public class EntEventDetailActivity extends AppCompatActivity {
                     entrantsList.remove(null);
                 }
 
-                if (entrantsList.contains(finalUserEmail)) {
+                if (entrantsList.contains(currentUserEmail)) {
                     Toast.makeText(
                             EntEventDetailActivity.this,
                             "You are already on the waiting list.",
@@ -148,7 +167,7 @@ public class EntEventDetailActivity extends AppCompatActivity {
                 int currentSize = entrantsList.size();
                 String limitDisplay = hasLimit ? String.valueOf(limitValue) : "?";
 
-                docRef.update("entrants", FieldValue.arrayUnion(finalUserEmail))
+                docRef.update("entrants", FieldValue.arrayUnion(currentUserEmail))
                         .addOnSuccessListener(aVoid -> {
                             Toast.makeText(
                                     EntEventDetailActivity.this,
@@ -172,7 +191,8 @@ public class EntEventDetailActivity extends AppCompatActivity {
         });
 
         leave_button.setOnClickListener(view -> {
-            if (finalUserEmail == null || finalUserEmail.isEmpty()) {
+            // leave waiting list logic (unchanged)
+            if (currentUserEmail == null || currentUserEmail.isEmpty()) {
                 Toast.makeText(
                         EntEventDetailActivity.this,
                         "Unable to determine your account. Please sign in again.",
@@ -199,7 +219,7 @@ public class EntEventDetailActivity extends AppCompatActivity {
                     entrantsList.remove(null);
                 }
 
-                if (!entrantsList.contains(finalUserEmail)) {
+                if (!entrantsList.contains(currentUserEmail)) {
                     Toast.makeText(
                             EntEventDetailActivity.this,
                             "You are not on the waiting list.",
@@ -212,7 +232,7 @@ public class EntEventDetailActivity extends AppCompatActivity {
                 String limitDisplay = limitLong != null ? String.valueOf(limitLong) : "?";
                 int currentSize = entrantsList.size();
 
-                docRef.update("entrants", FieldValue.arrayRemove(finalUserEmail))
+                docRef.update("entrants", FieldValue.arrayRemove(currentUserEmail))
                         .addOnSuccessListener(aVoid -> {
                             Toast.makeText(
                                     EntEventDetailActivity.this,
@@ -235,19 +255,18 @@ public class EntEventDetailActivity extends AppCompatActivity {
             });
         });
 
+        // Back button logic (unchanged)
         String finalUserEmailForBack = currentUserEmail;
         back_event_details_button.setOnClickListener(view -> {
             String fromActivity = getIntent().getStringExtra("FROM_ACTIVITY");
             Intent intent;
 
             if ("MY_EVENTS".equals(fromActivity)) {
-                // Return to My Events
                 intent = new Intent(EntEventDetailActivity.this, EntEventHistoryActivity.class);
             } else if ("HOME_ENT".equals(fromActivity)) {
                 //return to entrant home (path taken if qr code was scanned)
                 intent = new Intent(EntEventDetailActivity.this, HomeEntActivity.class);
             } else {
-                // Default: Return to All Events
                 intent = new Intent(EntEventDetailActivity.this, EntEventsActivity.class);
             }
 
@@ -257,6 +276,45 @@ public class EntEventDetailActivity extends AppCompatActivity {
         });
     }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Listen for changes to the participant's status
+        if (currentEventId != null && currentUserId != null && !currentUserId.isEmpty()) {
+            statusListener = repo.listenToParticipantStatus(currentEventId, currentUserId, status -> {
+                if ("SELECTED".equals(status)) {
+                    // Launch the invitation screen when selected
+                    Intent intent = new Intent(EntEventDetailActivity.this, EventInvitationActivity.class);
+                    intent.putExtra("EVENT_ID", currentEventId);
+                    intent.putExtra("USER_ID", currentUserId);
+                    startActivity(intent);
+                } else if ("accepted".equals(status)) {
+                    // Already accepted – disable waiting list buttons
+                    register_button.setEnabled(false);
+                    leave_button.setEnabled(false);
+                    Toast.makeText(this, "You have accepted the invitation.", Toast.LENGTH_SHORT).show();
+                } else if ("declined".equals(status)) {
+                    // Already declined – disable waiting list buttons
+                    register_button.setEnabled(false);
+                    leave_button.setEnabled(false);
+                    Toast.makeText(this, "You have declined the invitation.", Toast.LENGTH_SHORT).show();
+                }
+                // If null or "PENDING", do nothing – user is still on the waiting list.
+            });
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Remove listener to prevent memory leaks
+        if (statusListener != null) {
+            statusListener.remove();
+            statusListener = null;
+        }
+    }
+
+    /** Loads the event details from Firestore and updates the UI. */
     private void loadEventDetails() {
         docRef.get().addOnSuccessListener(currentEvent -> {
             if (!currentEvent.exists()) {
@@ -265,7 +323,6 @@ public class EntEventDetailActivity extends AppCompatActivity {
             }
 
             title.setText(currentEvent.getString("name"));
-
             closingDate.setText("");
             startEnd.setText("");
 
@@ -302,7 +359,7 @@ public class EntEventDetailActivity extends AppCompatActivity {
             int sampleSize = sampleSizeLong != null ? sampleSizeLong.intValue() : 0;
             lotteryWinners.setText("Lottery Winners: " + sampleSize);
 
-            //get image from database, convert to bitmap, display image.
+            // Decode event poster image, if present
             String image_base64 = currentEvent.getString("posterImage");
             if (image_base64 != null) {
                 byte[] decodedBytes = Base64.decode(image_base64, Base64.DEFAULT);
