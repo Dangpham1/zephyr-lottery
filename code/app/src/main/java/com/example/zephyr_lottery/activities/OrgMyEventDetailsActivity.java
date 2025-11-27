@@ -108,14 +108,7 @@ public class OrgMyEventDetailsActivity extends AppCompatActivity {
                 return;
             }
 
-//            String eventId = Integer.toString(eventCode);
-//
-//            // Mark each winner as SELECTED in participants subcollection
-//            for (String winnerId : winners) {
-//                repo.updateParticipantStatus(eventId, winnerId, "SELECTED");
-//            }
 
-            event.setChosen_entrants(winners);
             db.collection("events").document(Integer.toString(eventCode))
                     .update("winners", winners)
                     .addOnSuccessListener(aVoid -> {
