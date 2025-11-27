@@ -243,6 +243,9 @@ public class EntEventDetailActivity extends AppCompatActivity {
             if ("MY_EVENTS".equals(fromActivity)) {
                 // Return to My Events
                 intent = new Intent(EntEventDetailActivity.this, EntEventHistoryActivity.class);
+            } else if ("HOME_ENT".equals(fromActivity)) {
+                //return to entrant home (path taken if qr code was scanned)
+                intent = new Intent(EntEventDetailActivity.this, HomeEntActivity.class);
             } else {
                 // Default: Return to All Events
                 intent = new Intent(EntEventDetailActivity.this, EntEventsActivity.class);

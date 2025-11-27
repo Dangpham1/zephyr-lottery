@@ -1,27 +1,207 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/invitation_root"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp"
-    android:orientation="vertical">
+    tools:context=".activities.AddEventActivity">
 
     <!-- You can add event details here (name, time, location) via TextViews -->
 
-    <Button
-        android:id="@+id/btnAccept"
+    <ScrollView
+        android:id="@+id/scroll_content_invitation"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:id="@+id/content_container_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+        <!-- Title -->
+            <TextView
+                android:id="@+id/textView_label_invitation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Event Invitation Received!"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="10dp" />
+
+            <!-- Registration closes -->
+            <TextView
+                android:id="@+id/textView_title_invitation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Event name"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:layout_marginTop="8dp" />
+
+        <!-- Registration closes -->
+        <TextView
+            android:id="@+id/textView_closingdate_label_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Registration Closes"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:id="@+id/textView_closingdate_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Date / time"
+            android:textSize="16sp"
+            android:layout_marginTop="2dp" />
+
+        <!-- Starts / Ends -->
+        <TextView
+            android:id="@+id/textView_startend_label_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Starts/Ends"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:layout_marginTop="16dp" />
+
+        <TextView
+            android:id="@+id/textView_startenddates_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Start - End"
+            android:textSize="16sp"
+            android:layout_marginTop="2dp" />
+
+        <!-- Times -->
+        <TextView
+            android:id="@+id/textView_times_label_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Times"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:layout_marginTop="16dp" />
+
+        <TextView
+            android:id="@+id/textView_day_time_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Day / time"
+            android:textSize="16sp"
+            android:layout_marginTop="2dp" />
+
+        <!-- Location -->
+        <TextView
+            android:id="@+id/textView_location_label_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Location"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:layout_marginTop="16dp" />
+
+        <TextView
+            android:id="@+id/textView_location_string_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Location name"
+            android:textSize="16sp"
+            android:layout_marginTop="2dp" />
+
+        <!-- Price -->
+        <TextView
+            android:id="@+id/textView_price_label_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Price"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:layout_marginTop="16dp" />
+
+        <TextView
+            android:id="@+id/textView_price_string_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="$0.00"
+            android:textSize="16sp"
+            android:layout_marginTop="2dp" />
+
+        <!-- Description -->
+        <TextView
+            android:id="@+id/textView_description_label_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Description"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:layout_marginTop="16dp" />
+
+        <TextView
+            android:id="@+id/textView_description_string_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Event description goes here."
+            android:textSize="16sp"
+            android:layout_marginTop="2dp" />
+
+        <!--            Event image-->
+        <TextView
+            android:id="@+id/textView_eventImage_ent_invitation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Event Image:"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:layout_marginTop="16dp"/>
+
+        <ImageView
+            android:id="@+id/imageView_ent_eventImage_invitation"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="#d9d9d9"
+            app:srcCompat="@android:drawable/ic_menu_gallery" />
+        </LinearLayout>
+    </ScrollView>
+
+    <View
+        android:id="@+id/rectangle_bottom"
         android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_alignParentTop="true"
+        android:background="#D9D9D9"
+        android:visibility="visible"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="@id/button_accept_invitation"
+        tools:layout_editor_absoluteX="0dp" />
+
+    <Button
+        android:id="@+id/button_accept_invitation"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:text="Accept"
-        android:enabled="false" />
+        app:layout_constraintStart_toEndOf="@+id/button_reject_invitation"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
     <Button
-        android:id="@+id/btnDecline"
-        android:layout_width="match_parent"
+        android:id="@+id/button_reject_invitation"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Decline"
-        android:layout_marginTop="12dp"
-        android:enabled="false" />
+        android:text="Reject"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/button_accept_invitation"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
-</LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
+
 

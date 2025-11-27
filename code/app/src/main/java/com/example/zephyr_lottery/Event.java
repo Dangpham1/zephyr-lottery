@@ -17,8 +17,11 @@ public class Event {
     private String time;
     private int weekday;
     private String period;
-    private ArrayList<String> entrants;
-    private ArrayList<String> chosen_entrants;
+    private ArrayList<String> entrants; //all waitlisted participants. no invitation.
+    private ArrayList<String> winners; //all entrants with pending invitations
+    private ArrayList<String> rejected_entrants; //all entrants who rejected the invitation
+    private ArrayList<String> accepted_entrants; //all entrants who accept the invitation
+    private ArrayList<String> entrants_reroll; //all entrants who did not receive an invitation but could if someone cancels.
     private int limit;
     private Date date_created;
     private LocalDateTime lott_start_date;
@@ -44,6 +47,10 @@ public class Event {
         this.time = time;
         this.organizer_email = organizer_email;
         this.entrants = new ArrayList<>();
+        this.winners = new ArrayList<>();
+        this.rejected_entrants = new ArrayList<>();
+        this.accepted_entrants = new ArrayList<>();
+        this.entrants_reroll = new ArrayList<>();
     }
 
     @Override
@@ -347,20 +354,77 @@ public class Event {
      * @return
      * The entrants signed up for the lottery, as an ArrayList of Strings
      */
-    public ArrayList<String> getChosen_entrants() {
-        if (chosen_entrants == null) {
-            chosen_entrants = new ArrayList<>();
+    public ArrayList<String> getWinners() {
+        if (this.winners == null) {
+            this.winners = new ArrayList<>();
         }
-        return chosen_entrants;
+        return this.winners;
     }
 
     /**
      * Set a new list of entrants who won the lottery
-     * @param chosen_entrants
+     * @param new_winners
      * The new list of entrants
      */
-    public void setChosen_entrants(ArrayList<String> chosen_entrants) {
-        this.chosen_entrants = chosen_entrants != null ? chosen_entrants : new ArrayList<>();
+    public void setWinners(ArrayList<String> new_winners) {
+        if (new_winners == null) {
+            new_winners = new ArrayList<>();
+        }
+        this.winners = new_winners;
+    }
+
+    /**
+     * Obtain the list of entrants who rejected invitation
+     * @return
+     * list of entrants who rejected invitation as an ArrayList of Strings
+     */
+    public ArrayList<String> getRejected_entrants() {
+        return this.rejected_entrants;
+    }
+
+    /**
+     * set the the list of entrants who rejected invitation
+     * @param rejected_entrants
+     * new list for entrants who rejected invitation as an ArrayList of Strings
+     */
+    public void setRejected_entrants(ArrayList<String> rejected_entrants) {
+        this.rejected_entrants = rejected_entrants;
+    }
+
+    /**
+     * Obtain the list of entrants who accepted invitation
+     * @return
+     * list of entrants who accepted invitation as an ArrayList of Strings
+     */
+    public ArrayList<String> getAccepted_entrants() {
+        return accepted_entrants;
+    }
+
+    /**
+     * set the the list of entrants who accepted invitation
+     * @param accepted_entrants
+     * new list for entrants who accepted invitation as an ArrayList of Strings
+     */
+    public void setAccepted_entrants(ArrayList<String> accepted_entrants) {
+        this.accepted_entrants = accepted_entrants;
+    }
+
+    /**
+     * Obtain the list of entrants who did not get invitation but could if someone cancels
+     * @return
+     * The entrants who did not get invitation but could if someone cancels
+     */
+    public ArrayList<String> getEntrants_reroll() {
+        return entrants_reroll;
+    }
+
+    /**
+     * set the the list of entrants who did not get invitation but could if someone cancels
+     * @param entrants_reroll
+     * new list for entrants who did not get invitation but could if someone cancels, as an arraylist of strings
+     */
+    public void setEntrants_reroll(ArrayList<String> entrants_reroll) {
+        this.entrants_reroll = entrants_reroll;
     }
 
     /**

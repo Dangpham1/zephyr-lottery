@@ -3,13 +3,19 @@ package com.example.zephyr_lottery.activities;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 import androidx.core.app.ActivityCompat;
@@ -21,7 +27,14 @@ import androidx.core.view.WindowInsetsCompat;
 import com.example.zephyr_lottery.R;
 import com.example.zephyr_lottery.UserProfile;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.journeyapps.barcodescanner.ScanContract;
+import com.journeyapps.barcodescanner.ScanOptions;
+
+import java.util.ArrayList;
+
+import java.io.IOException;
 
 public class HomeEntActivity extends AppCompatActivity {
     private static final int NOTIFICATION_PERMISSION_CODE = 101;
@@ -31,6 +44,8 @@ public class HomeEntActivity extends AppCompatActivity {
     private FirebaseFirestore db;
     private FirebaseAuth mAuth;
     private String userEmail;
+    private ArrayList<Integer> incoming_invitations;
+    private ActivityResultLauncher<ScanOptions> scanLauncher;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,8 +70,8 @@ public class HomeEntActivity extends AppCompatActivity {
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
 
-        // Load username from Firebase
-        loadUsername();
+        // Load username from Firebase,
+        //loadUsername_checkAccount();
 
         editProfileButton.setOnClickListener(v -> {
             Intent intent = new Intent(HomeEntActivity.this, UserProfileActivity.class);
@@ -76,11 +91,32 @@ public class HomeEntActivity extends AppCompatActivity {
             startActivity(intent);
         });
 
+        //activity launcher for scanning qr code.
+        scanLauncher = registerForActivityResult(new ScanContract(), result -> {
+            if (result.getContents() != null) {
+                String event_code = result.getContents();
+
+                //switch to details activity and pass in the hashcode of the QR code
+                Intent intent = new Intent(HomeEntActivity.this, EntEventDetailActivity.class);
+                intent.putExtra("USER_EMAIL", mAuth.getCurrentUser().getEmail());
+                intent.putExtra("EVENT", event_code);
+                intent.putExtra("FROM_ACTIVITY", "HOME_ENT");
+                startActivity(intent);
+            } else {
+                Toast.makeText(HomeEntActivity.this, "Scan cancelled", Toast.LENGTH_SHORT).show();
+            }
+        });
+
         scanQRButton.setOnClickListener(v -> {
-            // TODO: add scan qr view
-            Toast.makeText(HomeEntActivity.this,
-                    "Scan QR not yet implemented",
-                    Toast.LENGTH_SHORT).show();
+            ScanOptions options = new ScanOptions();
+            options.setDesiredBarcodeFormats(ScanOptions.QR_CODE);
+            options.setPrompt("scan an event QR code");
+            options.setCameraId(0);  //rear camera
+            options.setBeepEnabled(true);
+            options.setBarcodeImageEnabled(false);
+            options.setOrientationLocked(false);
+
+            scanLauncher.launch(options);
         });
     }
 
@@ -88,10 +124,10 @@ public class HomeEntActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         // Reload username when returning from UserProfileActivity
-        loadUsername();
+        loadUsername_checkAccount();
     }
 
-    private void loadUsername() {
+    private void loadUsername_checkAccount() {
         String currentUserEmail = mAuth.getCurrentUser().getEmail();
 
         db.collection("accounts")
@@ -105,6 +141,34 @@ public class HomeEntActivity extends AppCompatActivity {
                         String username = profile.getUsername();
                         String userEmail = profile.getEmail();
                         textViewGreeting.setText("Greetings, " + username);
+
+                        //get any event invitations from database meant for this user
+                        incoming_invitations = profile.getInvitationCodes();
+
+                        //if we have any event invitations, we start the invitation activity
+                        if (incoming_invitations != null && !incoming_invitations.isEmpty()) {
+                            Intent intent = new Intent(HomeEntActivity.this, EventInvitationActivity.class);
+                            intent.putExtra("USER_EMAIL", mAuth.getCurrentUser().getEmail());
+
+                            //get code of the event and pass into activity
+                            int invitation_code = incoming_invitations.get(incoming_invitations.size() - 1);
+                            incoming_invitations.remove(incoming_invitations.size() - 1);
+                            intent.putExtra("EVENT_CODE", Integer.toString(invitation_code));
+
+                            //remove the invitation from database as well.
+                            db.collection("accounts").document(currentUserEmail)
+                                .update("invitationCodes", FieldValue.arrayRemove(invitation_code))
+                                    .addOnSuccessListener(aVoid -> {
+                                        //start activity after invitation removed.
+                                        startActivity(intent);
+                                    })
+                                    .addOnFailureListener(e -> {
+                                        Toast.makeText(HomeEntActivity.this,
+                                                "invitation not removed from database :(",
+                                                Toast.LENGTH_SHORT).show();
+                                    });
+                        }
+
                     } else {
                         textViewGreeting.setText("Hello, User");
                     }

@@ -1,5 +1,7 @@
 package com.example.zephyr_lottery;
 
+import java.util.ArrayList;
+
 /**
  * This class stores the details of a user
  */
@@ -11,6 +13,7 @@ public class UserProfile {
     private String type;
     private String phone;
     private Boolean receivingNotis;
+    private ArrayList<Integer> invitationCodes;
     private String fcmToken;
 
     // empty constructor for firebase
@@ -32,6 +35,7 @@ public class UserProfile {
         this.email = email;
         this.type = type;
         this.receivingNotis = false;
+        this.invitationCodes = new ArrayList<Integer>();
     }
 
     /**
@@ -51,6 +55,7 @@ public class UserProfile {
         this.type = type;
         this.phone = phone;
         this.receivingNotis = false;
+        this.invitationCodes = new ArrayList<Integer>();
     }
 
     /**
@@ -72,6 +77,7 @@ public class UserProfile {
         this.type = type;
         this.phone = phone;
         this.receivingNotis = receivingNotis;
+        this.invitationCodes = new ArrayList<Integer>();
     }
 
     /**
@@ -127,6 +133,36 @@ public class UserProfile {
      */
     public void setFcmToken(String fcmToken) {
         this.fcmToken = fcmToken;
+    }
+
+    /**
+     * get the user's incoming invitations
+     * @return
+     * array list of hashcodes of the events of any incoming invitations
+     */
+    public ArrayList<Integer> getInvitationCodes() {
+        return invitationCodes;
+    }
+
+    /**
+     * set the user's incoming invitations
+     * @param invitationCodes
+     * array list with hashcodes of the events of any incoming invitations
+     */
+    public void setInvitationCodes(ArrayList<Integer> invitationCodes) {
+        this.invitationCodes = invitationCodes;
+    }
+
+    /**
+     * add one invitation to a user's incoming invitations.
+     * @param new_invitation_code
+     * the hashcode of the event with the new invitation
+     */
+    public void addInvitationCode(int new_invitation_code) {
+        if (this.invitationCodes == null) {
+            this.invitationCodes = new ArrayList<Integer>();
+        }
+        this.invitationCodes.add(new_invitation_code);
     }
 }
 

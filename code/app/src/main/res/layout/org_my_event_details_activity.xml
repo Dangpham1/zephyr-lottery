@@ -9,16 +9,15 @@
     android:background="@android:color/white"
     tools:context=".activities.OrgMyEventDetailsActivity">
 
-    <!-- Scrollable content area -->
     <ScrollView
         android:id="@+id/scrollView"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:fillViewport="true"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@+id/button_notify_selected"
+        app:layout_constraintBottom_toTopOf="@+id/button_entrants"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
             android:id="@+id/org_myeventdetails_linlayout"
@@ -43,79 +42,62 @@
                 android:id="@+id/imageView_orgEventDetails"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                app:srcCompat="@android:drawable/ic_menu_gallery" />
+                app:srcCompat="@android:drawable/ic_menu_gallery"
+                app:layout_constraintBottom_toTopOf="@+id/button_entrants"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/scrollView"/>
         </LinearLayout>
     </ScrollView>
 
-    <!-- Notify Selected Entrants (from branch) -->
-    <Button
-        android:id="@+id/button_notify_selected"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Notify Selected Entrants"
-        android:layout_marginBottom="12dp"
-        app:layout_constraintBottom_toTopOf="@+id/button_draw_lottery"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/scrollView" />
-
-    <!-- Draw Lottery -->
-    <Button
-        android:id="@+id/button_draw_lottery"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Draw Lottery"
-        android:layout_marginBottom="12dp"
-        app:layout_constraintBottom_toTopOf="@+id/button_org_event_details_edit"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@+id/button_entrants"
-        app:layout_constraintTop_toBottomOf="@+id/button_notify_selected" />
-
-    <!-- View Entrants -->
     <Button
         android:id="@+id/button_entrants"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="View Entrants"
-        android:layout_marginBottom="12dp"
         app:layout_constraintBottom_toTopOf="@+id/button_generate_qr"
-        app:layout_constraintStart_toEndOf="@+id/button_draw_lottery"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/button_notify_selected" />
+        app:layout_constraintStart_toEndOf="@+id/button_draw_lottery"
+        app:layout_constraintTop_toBottomOf="@+id/scrollView" />
 
-    <!-- Edit Event button (from main) -->
-    <Button
-        android:id="@+id/button_org_event_details_edit"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Edit Event"
-        android:layout_marginBottom="12dp"
-        app:layout_constraintBottom_toTopOf="@+id/button_org_event_details_back"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@+id/button_generate_qr"
-        app:layout_constraintTop_toBottomOf="@+id/button_draw_lottery" />
-
-    <!-- Generate QR (from main) -->
     <Button
         android:id="@+id/button_generate_qr"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Generate QR"
-        android:layout_marginBottom="12dp"
         app:layout_constraintBottom_toTopOf="@+id/button_org_event_details_back"
-        app:layout_constraintStart_toEndOf="@+id/button_org_event_details_edit"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/button_org_event_details_edit"
         app:layout_constraintTop_toBottomOf="@+id/button_entrants" />
 
-    <!-- Back -->
     <Button
         android:id="@+id/button_org_event_details_back"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Back"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/button_org_event_details_edit" />
+
+    <Button
+        android:id="@+id/button_org_event_details_edit"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Edit Event"
+        app:layout_constraintBottom_toTopOf="@+id/button_org_event_details_back"
+        app:layout_constraintEnd_toStartOf="@+id/button_generate_qr"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/button_draw_lottery" />
+
+    <Button
+        android:id="@+id/button_draw_lottery"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Draw Lottery"
+        app:layout_constraintBottom_toTopOf="@+id/button_org_event_details_edit"
+        app:layout_constraintEnd_toStartOf="@+id/button_entrants"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/scrollView" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
